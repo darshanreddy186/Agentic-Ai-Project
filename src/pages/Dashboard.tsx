@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { WellnessSidebar } from "@/components/WellnessSidebar";
 import { UserInteractionBox } from "@/components/UserInteractionBox";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { RecommendationCard } from "@/components/RecommendationCard";
@@ -27,9 +26,6 @@ const Dashboard = () => {
     <div className="flex min-h-screen bg-gradient-to-br from-background to-accent">
       {/* Mood Popup */}
       <MoodPopup isOpen={showMoodPopup} onClose={handleMoodPopupClose} />
-      
-      {/* Left Sidebar */}
-      <WellnessSidebar />
       
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
