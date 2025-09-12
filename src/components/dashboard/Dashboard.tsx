@@ -10,7 +10,7 @@ import { AchievementBadges } from './AchievementBadges';
 import { RelaxationHub } from './RelaxationHub';
 import { CommunityWall } from './CommunityWall';
 import { AIChat } from './AIChat';
-import { BookOpen, Brain, Heart, Users, Sparkles, MessageCircle } from 'lucide-react';
+import { BookOpen, Heart, Users, Sparkles, MessageCircle } from 'lucide-react';
 
 interface DashboardProps {
   profile: Profile;
