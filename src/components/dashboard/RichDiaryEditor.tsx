@@ -120,7 +120,7 @@ const ImageGalleryNode = Node.create({
 
 // --- MAIN EDITOR COMPONENT ---
 export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
-  const { content, isEditable, onChange, onSaveMemory, onDeleteImage, showNotification } = props;
+  const { content, isEditable, onChange, onSaveMemory, showNotification } = props;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const { open: openMemoryModal, ModalComponent } = useMemoryModal(onSaveMemory, showNotification);
@@ -130,7 +130,6 @@ export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
     content,
     editorProps: {
       attributes: { class: 'diary-editor-prose focus:outline-none' },
-      onDeleteImage,
     },
     editable: isEditable,
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
@@ -138,7 +137,7 @@ export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
 
   useEffect(() => {
     if (editor) {
-      if (editor.getHTML() !== content) editor.commands.setContent(content, false);
+      if (editor.getHTML() !== content) editor.commands.setContent(content);
       if (editor.isEditable !== isEditable) editor.setEditable(isEditable);
     }
   }, [content, isEditable, editor]);
