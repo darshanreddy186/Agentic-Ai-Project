@@ -50,7 +50,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
       // Award first achievement
       await supabase.from('achievements').insert({
-        user_id: user.id,
+        clerk_user_id: user.id,
         badge_type: 'welcome',
         title: 'Welcome Aboard! 🎉',
         description: 'Completed your profile setup'
