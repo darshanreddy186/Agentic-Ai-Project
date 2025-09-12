@@ -56,10 +56,10 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         description: 'Completed your profile setup'
       });
 
-      onComplete();
     } catch (error) {
-      console.error('Error saving profile:', error);
+      console.log('Error saving profile:', error);
     }
+    onComplete();
   };
 
   return (

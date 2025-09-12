@@ -1,4 +1,3 @@
-import React from 'react';
 import { SignIn, SignUp } from '@clerk/clerk-react';
 import { motion } from 'framer-motion';
 import { Heart, Sparkles, Star, Flower } from 'lucide-react';

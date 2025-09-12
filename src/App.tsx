@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { supabase, Profile } from './lib/supabase';
 import { OnboardingFlow } from './components/onboarding/OnboardingFlow';
@@ -8,44 +8,64 @@ import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 
 function App() {
-  const { isSignedIn, user, isLoaded } = useUser();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  // Original state and hooks are commented out for development
+  // const { isSignedIn, user, isLoaded } = useUser();
+  // const [profile, setProfile] = useState<Profile | null>(null);
+  // const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
-  useEffect(() => {
-    if (isSignedIn && user) {
-      checkUserProfile();
-    } else {
-      setIsLoadingProfile(false);
-    }
-  }, [isSignedIn, user]);
+  // useEffect(() => {
+  //   if (isSignedIn && user) {
+  //     checkUserProfile();
+  //   } else {
+  //     setIsLoadingProfile(false);
+  //   }
+  // }, [isSignedIn, user]);
 
-  const checkUserProfile = async () => {
-    if (!user) return;
+  // const checkUserProfile = async () => {
+  //   if (!user) return;
 
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('clerk_user_id', user.id)
-        .single();
+  //   try {
+  //     const { data, error } = await supabase
+  //       .from('profiles')
+  //       .select('*')
+  //       .eq('clerk_user_id', user.id)
+  //       .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile:', error);
-      }
+  //     if (error && error.code !== 'PGRST116') {
+  //       console.error('Error fetching profile:', error);
+  //     }
 
-      setProfile(data || null);
-    } catch (error) {
-      console.error('Error checking profile:', error);
-    } finally {
-      setIsLoadingProfile(false);
-    }
-  };
+  //     setProfile(data || null);
+  //   } catch (error) {
+  //     console.error('Error checking profile:', error);
+  //   } finally {
+  //     setIsLoadingProfile(false);
+  //   }
+  // };
 
-  const handleOnboardingComplete = () => {
-    checkUserProfile();
-  };
+  // const handleOnboardingComplete = () => {
+  //   checkUserProfile();
+  // };
 
+  // --- DEVELOPMENT BYPASS ---
+  // Create a mock profile to pass to the Dashboard
+  const mockProfile: Profile = {
+  id: "1",
+  clerk_user_id: "user_123",
+  name: "Akshay Kumar",
+  age: 20,
+  gender: "male",
+  date_of_birth: "2005-09-12",
+  avatar_type: "default",
+  created_at: "2025-09-12T10:00:00.000Z",
+  updated_at: "2025-09-12T12:00:00.000Z",
+};
+
+  // Directly render the Dashboard for development
+  return <Dashboard profile={mockProfile} />;
+
+  // --- ORIGINAL LOGIC ---
+  /*
   // Loading state
   if (!isLoaded || isLoadingProfile) {
     return (
@@ -81,6 +101,7 @@ function App() {
 
   // Signed in with profile - show main app
   return <Dashboard profile={profile} />;
+  */
 }
 
 export default App;

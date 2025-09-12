@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');
+
+.diary-container {
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  background-color: #fffdf7;
+  padding: 1rem;
+}
+
+.diary-toolbar {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid hsl(var(--border));
+  margin-bottom: 1rem;
+}
+
+.diary-paper {
+  background-image: linear-gradient(to bottom, transparent 31px, #e7e5e4 32px);
+  background-size: 100% 32px;
+  line-height: 32px;
+  padding: 0 1rem;
+  outline: none;
+}
+
+.diary-editor-prose {
+  font-family: 'Caveat', cursive;
+  font-size: 24px;
+  font-weight: 500;
+  color: #1c1917;
+  min-height: 600px;
+  /* NEW: This is important for centering the image containers */
+  text-align: center;
+}
+
+.diary-editor-prose p {
+  margin: 0;
+  padding: 0;
+  /* Reset text alignment for paragraphs so text is not centered */
+  text-align: left;
+}
+
+/* --- NEW, SIMPLIFIED & ROBUST IMAGE STYLES --- */
+
+/* Target the Tiptap wrapper for an image node */
+.image-container {
+  display: inline-block; /* Allows images to sit side-by-side */
+  position: relative;
+  vertical-align: top;
+  margin: 4px;
+  padding: 4px; /* Creates the white border effect */
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  width: calc(50% - 18px); /* Two-column layout with margins */
+  max-width: 250px;
+}
+
+/* Make the image inside the container fill it */
+.image-container img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  display: block; 
+}
+
+/* If an image is the only one in a paragraph, make it larger */
+.image-container:only-child {
+  width: calc(70% - 18px);
+  max-width: 400px;
+}
+
+/* Add a highlight when the image node is selected */
+.ProseMirror-selectednode .image-container {
+  outline: 3px solid hsl(var(--primary));
+}
+
+.delete-image-button {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  background-color: hsl(var(--destructive));
+  color: hsl(var(--destructive-foreground));
+  border-radius: 9999px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  transform: scale(0.8);
+}
+
+.image-container:hover .delete-image-button {
+  opacity: 1;
+  transform: scale(1);
+}

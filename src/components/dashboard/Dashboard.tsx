@@ -3,7 +3,7 @@ import { useUser } from '@clerk/clerk-react';
 import { supabase, Profile, DiaryEntry, Achievement } from '../../lib/supabase';
 import { motion } from 'framer-motion';
 import { Avatar } from '../common/Avatar';
-import { DiarySection } from './DiarySection';
+import  DiarySection  from './DiarySection';
 import { MoodWheel } from './MoodWheel';
 import { GrowingPlant } from './GrowingPlant';
 import { AchievementBadges } from './AchievementBadges';
