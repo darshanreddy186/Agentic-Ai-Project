@@ -176,6 +176,9 @@ export function Community() {
     const proceedWithPosting = async (ai_analysis: object) => {
         if (!commentFormData.content.trim() || !selectedPost) return;
         setIsSubmitting(true);
+        if(!user){
+            return toast.error("You must be logged in to post a response.");
+        }
 
         try {
             const { data: newComment, error } = await supabase.from('comments').insert([{ post_id: selectedPost.id, content: commentFormData.content, author_name: commentFormData.author_name || 'Anonymous', user_id: user.id, parent_comment_id: replyTo?.id, ai_analysis }]).select().single();

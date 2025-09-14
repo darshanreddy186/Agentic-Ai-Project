@@ -6,6 +6,7 @@ import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 import { format } from 'date-fns';
 import { Calendar as CalendarIcon } from 'lucide-react';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // --- INTERFACES & TYPES ---
 interface Notification {
@@ -20,6 +21,13 @@ const getToday = (): Date => {
   today.setHours(0, 0, 0, 0); // Normalize to the start of the day
   return today;
 };
+
+// --- INITIALIZE GEMINI MODEL ---
+// Using an environment variable is crucial for security.
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY; 
+const genAI = new GoogleGenerativeAI(API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+
 
 // --- MAIN COMPONENT ---
 export function Diary() {
@@ -49,7 +57,7 @@ export function Diary() {
       setDiaryHtml("<p>What's on your mind today?</p>");
       setEditMode(true);
     }
-  }, [selectedDate, selectedEntry, entries]);
+  }, [selectedDate, entries]);
 
   const loadEntries = async () => {
     if (!user) return;
@@ -84,37 +92,72 @@ export function Diary() {
     setIsCalendarOpen(false);
   };
 
+  const getMoodScore = async (content: string): Promise<number> => {
+    const plainText = content.replace(/<[^>]*>?/gm, ''); // Strip HTML tags
+    if (plainText.trim().length < 10) return 5; // Return neutral for short text
+
+    const prompt = `On a scale of 1 (very negative) to 10 (very positive), analyze the sentiment of this diary entry. Respond with only a number. Entry: "${plainText}"`;
+
+    try {
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = await response.text();
+      const score = parseInt(text.trim(), 10);
+      return isNaN(score) ? 5 : Math.max(1, Math.min(10, score)); // Clamp between 1-10
+    } catch (error) {
+      console.error("Error getting mood score:", error);
+      return 5; // Return neutral on error
+    }
+  };
+  
+  // --- UPDATED: handleSaveEntry now calls the backend Edge Function to update the AI summary ---
   const handleSaveEntry = async () => {
     if (!user) return;
     setSaving(true);
+    
+    const moodScore = await getMoodScore(diaryHtml);
+
     try {
         const entryData = {
             user_id: user.id,
             title: `Entry for ${format(selectedDate, 'PPP')}`,
             content: diaryHtml,
-            mood_score: 5,
+            mood_score: moodScore, // Dynamic score
             tags: [],
             created_at: selectedDate.toISOString()
         };
 
-        let error;
-
-        if (selectedEntry) {
-            const { error: updateError } = await supabase
+        const { data: savedEntry, error } = selectedEntry 
+            ? await supabase
                 .from('diary_entries')
-                .update({ content: entryData.content, title: entryData.title })
-                .eq('id', selectedEntry.id);
-            error = updateError;
-        } else {
-            const { error: insertError } = await supabase
+                .update({ content: entryData.content, title: entryData.title, mood_score: entryData.mood_score })
+                .eq('id', selectedEntry.id)
+                .select()
+                .single()
+            : await supabase
                 .from('diary_entries')
-                .insert(entryData);
-            error = insertError;
-        }
+                .insert(entryData)
+                .select()
+                .single();
 
         if (error) throw error;
 
-        showNotification({ message: "Entry Saved!", type: "success" });
+        // --- NEW: Securely update the AI summary via an Edge Function ---
+        // This keeps your logic and API keys on the server and is more scalable.
+        const { error: functionError } = await supabase.functions.invoke('update-diary-summary', {
+            body: { 
+              userId: user.id,
+              newEntryContent: diaryHtml 
+            },
+        });
+
+        if (functionError) {
+          console.error("Error updating AI summary:", functionError);
+          showNotification({ message: "Entry Saved", description: "Could not update AI summary.", type: "success" });
+        } else {
+          showNotification({ message: "Entry Saved & Analyzed!", type: "success" });
+        }
+        
         setEditMode(false);
         await loadEntries(); // Refresh entries
     } catch (error: any) {
@@ -124,12 +167,8 @@ export function Diary() {
     }
   };
 
-  // --- NEWLY IMPLEMENTED FUNCTIONS ---
-
   const handleSaveMemory = async (memory: { imageUrl: string; context: string; mood: string }) => {
     if (!user) return;
-    
-    // Ensure the entry for the selected date exists before saving a memory
     if (!selectedEntry) {
       showNotification({ message: "Save the diary entry first!", description: "Memories can only be added to a saved entry.", type: "error" });
       return;
@@ -144,22 +183,7 @@ export function Diary() {
     if (error) {
         showNotification({ message: "Could not save memory", description: error.message, type: "error" });
     }
-    // No success notification here, as the modal in the editor handles it.
   };
-
-  const handleDeleteImage = async (imageUrl: string) => {
-    const fileName = imageUrl.split('/').pop();
-    if (!fileName) return;
-
-    // We can't guarantee a memory was saved, so we use `rpc` to be safe
-    await supabase.storage.from('diary_images').remove([fileName]);
-    await supabase.from('memories').delete().eq('image_url', imageUrl);
-    
-    showNotification({ message: "Image deleted", type: 'success' });
-    // After deleting, you might want to refresh the entry content from the DB
-    await loadEntries();
-  };
-
 
   const isFuture = selectedDate > getToday();
 
@@ -208,7 +232,6 @@ export function Diary() {
                     isEditable={editMode}
                     onChange={setDiaryHtml}
                     onSaveMemory={handleSaveMemory}
-                    // onDeleteImage={handleDeleteImage}
                     showNotification={showNotification}
                 />
             )}
@@ -217,7 +240,7 @@ export function Diary() {
                 {editMode ? (
                   <>
                     <button onClick={handleSaveEntry} disabled={saving} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-md hover:bg-zinc-800 disabled:opacity-50">
-                      {saving ? "Saving..." : "Save Entry"}
+                      {saving ? "Analyzing & Saving..." : "Save Entry"}
                     </button>
                     {selectedEntry && (
                       <button onClick={() => { setEditMode(false); setDiaryHtml(selectedEntry.content); }} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium bg-transparent border rounded-md hover:bg-zinc-100">Cancel</button>
