@@ -1,13 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase, DiaryEntry, UserProfile } from '../lib/supabase';
 import { Calendar, TrendingUp, Heart, Lightbulb, BookOpen, Users, Sparkles } from 'lucide-react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// --- Initialize Gemini Model for Home Page ---
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY; 
-const genAI = new GoogleGenerativeAI(API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+// NO MORE GEMINI AI ON THE HOME PAGE - IT'S MUCH FASTER NOW!
 
 export function Home() {
   const { user } = useAuth();
@@ -15,7 +11,6 @@ export function Home() {
   const [recentEntries, setRecentEntries] = useState<DiaryEntry[]>([]);
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [recsLoading, setRecsLoading] = useState(true);
   const [stats, setStats] = useState({
     totalEntries: 0,
     avgMoodScore: 0,
@@ -28,42 +23,17 @@ export function Home() {
     }
   }, [user]);
 
-  const generateHomePageRecommendations = async (summary: { diary_summary: string | null; aichat_summary: string | null; } | null) => {
-    if (!summary || !summary.diary_summary) {
-      setRecommendations(["Start by writing your first diary entry to get personalized recommendations!"]);
-      setRecsLoading(false);
-      return;
-    }
-    const prompt = `
-      You are a compassionate wellness assistant. Based on the following summary of a user's diary, 
-      provide exactly 5 actionable recommendations to improve their mental and physical health.
-      Each recommendation should be a short, single sentence.
-      Format your response as a numbered list (e.g., 1., 2., 3., 4., 5.). Do not add any intro or outro text.
-      User's Diary Summary: "${summary.diary_summary}"`;
-    try {
-      const result = await model.generateContent(prompt);
-      const text = await result.response.text();
-      const recs = text.split('\n').map(rec => rec.replace(/^\d+\.\s*/, '').trim()).filter(rec => rec.length > 5);
-      setRecommendations(recs.slice(0, 5));
-    } catch (error) {
-      console.error('Error generating recommendations:', error);
-      setRecommendations(['Take a few deep breaths today.', 'Try going for a short walk outside.', 'Listen to your favorite calming music.', 'Make sure you are staying hydrated.', 'Do a gentle five-minute stretch.']);
-    } finally {
-      setRecsLoading(false);
-    }
-  };
-
+  // --- UPDATED: `loadUserData` is now much simpler and faster ---
   const loadUserData = async () => {
     if (!user) return;
     setLoading(true);
-    setRecsLoading(true);
+
     try {
-      // --- FIX IS HERE: Replaced .single() with .maybeSingle() ---
-      // This correctly handles cases where a user might not have a profile or summary yet, returning null instead of an error.
       const [profileRes, entriesRes, summaryRes, allEntriesRes] = await Promise.all([
         supabase.from('user_profiles').select('*').eq('id', user.id).maybeSingle(),
         supabase.from('diary_entries').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3),
-        supabase.from('user_ai_summaries').select('diary_summary, aichat_summary').eq('user_id', user.id).maybeSingle(),
+        // We only need the recommendations column now!
+        supabase.from('user_ai_summaries').select('recommendations').eq('user_id', user.id).maybeSingle(),
         supabase.from('diary_entries').select('created_at, mood_score', { count: 'exact' }).eq('user_id', user.id)
       ]);
 
@@ -78,15 +48,18 @@ export function Home() {
         const streakDays = calculateStreakDays(allEntries);
         setStats({ totalEntries, avgMoodScore: Math.round(avgMoodScore * 10) / 10, streakDays });
       }
-      
-      await generateHomePageRecommendations(summaryRes.data);
+
+      // Directly set recommendations from the database
+      const summaryData = summaryRes.data;
+      if (summaryData && summaryData.recommendations && summaryData.recommendations.length > 0) {
+        setRecommendations(summaryData.recommendations);
+      } else {
+        setRecommendations(["Write your first diary entry to get personalized recommendations!"]);
+      }
 
     } catch (error: any) {
       console.error('Error loading user data:', error.message);
-      // Set a graceful state in case of a critical error
-      setLoading(false);
-      setRecsLoading(false);
-      setRecommendations(["Could not load recommendations at this time."]);
+      setRecommendations(["Could not load recommendations."]);
     } finally {
       setLoading(false);
     }
@@ -126,14 +99,12 @@ export function Home() {
     );
   }
 
+  // --- JSX is simplified as we no longer need a separate `recsLoading` state ---
   return (
     <div className="max-w-6xl mx-auto space-y-8 p-4 md:p-0">
       <div className="bg-gradient-to-r from-blue-500 to-green-500 rounded-xl p-8 text-white">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Welcome back{profile?.display_name ? `, ${profile.display_name}` : ''}!</h1>
-            <p className="text-blue-100">Ready to continue your wellness journey today?</p>
-          </div>
+          <div><h1 className="text-3xl font-bold mb-2">Welcome back{profile?.display_name ? `, ${profile.display_name}` : ''}!</h1><p className="text-blue-100">Ready to continue your wellness journey today?</p></div>
           <div className="hidden md:block"><Sparkles className="w-16 h-16 text-blue-200" /></div>
         </div>
       </div>
@@ -144,11 +115,7 @@ export function Home() {
       </div>
       <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">
         <div className="flex items-center mb-4"><div className="p-2 bg-purple-100 rounded-lg"><Lightbulb className="w-5 h-5 text-purple-600" /></div><h2 className="ml-3 text-xl font-semibold text-gray-900">Personalized Recommendations</h2></div>
-        {recsLoading ? (
-          <div className="space-y-3">{[...Array(3)].map((_, i) => (<div key={i} className="h-8 bg-gray-100 rounded-lg animate-pulse"></div>))}</div>
-        ) : (
-          <div className="space-y-3">{recommendations.map((rec, index) => (<div key={index} className="flex items-start space-x-3 p-3 bg-purple-50 rounded-lg"><div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div><p className="text-gray-700 flex-1">{rec}</p></div>))}</div>
-        )}
+        <div className="space-y-3">{recommendations.map((rec, index) => (<div key={index} className="flex items-start space-x-3 p-3 bg-purple-50 rounded-lg"><div className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0"></div><p className="text-gray-700 flex-1">{rec}</p></div>))}</div>
       </div>
       {recentEntries.length > 0 && (
         <div className="bg-white rounded-lg p-6 shadow-md border border-gray-100">

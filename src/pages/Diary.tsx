@@ -61,11 +61,7 @@ export function Diary() {
     if (!user) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('diary_entries')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('diary_entries').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
       if (error) throw error;
       setEntries(data || []);
     } catch (error: any) {
@@ -102,7 +98,7 @@ export function Diary() {
     }
   };
 
-  // --- FULLY CORRECTED AND CLIENT-SIDE `handleSaveEntry` FUNCTION ---
+  // --- UPDATED: `handleSaveEntry` now generates and saves recommendations ---
   const handleSaveEntry = async () => {
     if (!user) return;
     const plainTextContent = diaryHtml.replace(/<[^>]*>?/gm, '').trim();
@@ -113,60 +109,38 @@ export function Diary() {
     setSaving(true);
     
     try {
-      // Step 1: Get Mood Score and Save the primary Diary Entry
+      // Step 1: Save the primary Diary Entry
       const moodScore = await getMoodScore(diaryHtml);
-      const entryData = {
-          user_id: user.id,
-          title: `Entry for ${format(selectedDate, 'PPP')}`,
-          content: diaryHtml,
-          mood_score: moodScore,
-          tags: [],
-          created_at: selectedDate.toISOString()
-      };
+      const entryData = { user_id: user.id, title: `Entry for ${format(selectedDate, 'PPP')}`, content: diaryHtml, mood_score: moodScore, tags: [], created_at: selectedDate.toISOString() };
       const { error: saveError } = selectedEntry 
           ? await supabase.from('diary_entries').update(entryData).eq('id', selectedEntry.id)
           : await supabase.from('diary_entries').insert(entryData);
-
       if (saveError) throw new Error(`Failed to save entry: ${saveError.message}`);
 
-      // Step 2: Fetch the user's existing AI summary from the database
-      const { data: summaryData } = await supabase
-        .from('user_ai_summaries')
-        .select('diary_summary')
-        .eq('user_id', user.id)
-        .single();
-      
+      // Step 2: Fetch the user's old AI summary
+      const { data: summaryData } = await supabase.from('user_ai_summaries').select('diary_summary').eq('user_id', user.id).maybeSingle();
       const oldSummary = summaryData?.diary_summary || "This is the user's first diary entry.";
 
-      // Step 3: Craft a prompt for Gemini to update the summary
-      const prompt = `
-        You are an AI assistant that helps users understand their emotional journey by summarizing their diary entries over time.
-        
-        PREVIOUS SUMMARY OF USER'S MOOD AND THOUGHTS:
-        "${oldSummary}"
+      // Step 3: Generate the NEW, updated summary
+      const summaryPrompt = `You are an AI assistant that summarizes a user's diary entries over time. Update the previous summary by integrating the key feelings from the new entry. PREVIOUS SUMMARY: "${oldSummary}". NEW ENTRY: "${plainTextContent}". TASK: Respond with ONLY the updated summary text.`;
+      const summaryResult = await model.generateContent(summaryPrompt);
+      const updatedSummary = await summaryResult.response.text();
 
-        NEW DIARY ENTRY FROM THE USER:
-        "${plainTextContent}"
+      // Step 4: Use the new summary to generate NEW recommendations
+      const recsPrompt = `Based on this user summary, provide exactly 5 short, actionable wellness recommendations. Format as a numbered list. SUMMARY: "${updatedSummary}"`;
+      const recsResult = await model.generateContent(recsPrompt);
+      const recsText = await recsResult.response.text();
+      const parsedRecommendations = recsText.split('\n').map(rec => rec.replace(/^\d+\.\s*/, '').trim()).filter(rec => rec.length > 5);
 
-        TASK:
-        Update the previous summary by integrating the key feelings, events, and thoughts from the new diary entry. 
-        The result should be a concise, flowing narrative that reflects the user's evolving state.
-        Respond with ONLY the updated summary text.`;
-      
-      // Step 4: Get the updated summary from Gemini
-      const result = await model.generateContent(prompt);
-      const updatedSummary = await result.response.text();
-
-      // Step 5: Save the new summary back to the 'user_ai_summaries' table
-      const { error: upsertError } = await supabase
-        .from('user_ai_summaries')
-        .upsert({ 
+      // Step 5: Save BOTH the new summary and new recommendations to the database
+      const { error: upsertError } = await supabase.from('user_ai_summaries').upsert({ 
           user_id: user.id, 
           diary_summary: updatedSummary.trim(),
+          recommendations: parsedRecommendations.slice(0, 5), // Ensure it's an array of 5
           updated_at: new Date().toISOString() 
         }, { onConflict: 'user_id' });
       
-      if (upsertError) throw new Error(`Could not update AI summary: ${upsertError.message}`);
+      if (upsertError) throw new Error(`Could not update AI data: ${upsertError.message}`);
       
       showNotification({ message: "Entry Saved & Analyzed!", type: "success" });
       setEditMode(false);
@@ -180,11 +154,8 @@ export function Diary() {
   };
 
   const handleSaveMemory = async (memory: { imageUrl: string; context: string; mood: string }) => {
-    // This function remains the same
     if (!user || !selectedEntry) return;
-    const { error } = await supabase.from('memories').insert({ 
-        user_id: user.id, diary_entry_id: selectedEntry.id, ...memory 
-    });
+    const { error } = await supabase.from('memories').insert({ user_id: user.id, diary_entry_id: selectedEntry.id, ...memory });
     if (error) showNotification({ message: "Could not save memory", description: error.message, type: "error" });
   };
 
@@ -235,9 +206,7 @@ export function Diary() {
                     <button onClick={handleSaveEntry} disabled={saving} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-md hover:bg-zinc-800 disabled:opacity-50">
                       {saving ? "Analyzing & Saving..." : "Save Entry"}
                     </button>
-                    {selectedEntry && (
-                      <button onClick={() => { setEditMode(false); setDiaryHtml(selectedEntry.content); }} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium bg-transparent border rounded-md hover:bg-zinc-100">Cancel</button>
-                    )}
+                    {selectedEntry && (<button onClick={() => { setEditMode(false); setDiaryHtml(selectedEntry.content); }} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium bg-transparent border rounded-md hover:bg-zinc-100">Cancel</button>)}
                   </>
                 ) : (
                   selectedEntry && <button onClick={() => setEditMode(true)} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-md hover:bg-zinc-800">Edit Entry</button>
