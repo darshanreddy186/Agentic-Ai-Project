@@ -1,84 +1,123 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+interface GeminiResponse {
+  candidates: {
+    content: {
+      parts: {
+        text: string
+      }[]
+    }
+  }[]
+}
 
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+export class GeminiAI {
+  private apiKey: string
+  private baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
 
-export const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-
-export const analyzeMood = async (diaryContent: string): Promise<{ score: number; analysis: string }> => {
-  try {
-    const prompt = `
-      Analyze this diary entry from a young person and provide:
-      1. A mood score from 1-10 (1 = very negative, 10 = very positive)
-      2. A brief, empathetic analysis in a friendly, non-clinical tone
-      
-      Diary entry: "${diaryContent}"
-      
-      Respond in JSON format: {"score": number, "analysis": "string"}
-    `;
-    
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-    
-    return JSON.parse(text);
-  } catch (error) {
-    console.error('Error analyzing mood:', error);
-    return { score: 5, analysis: "Thanks for sharing your thoughts today! Keep expressing yourself - it's a great way to process your feelings." };
+  constructor(apiKey: string) {
+    this.apiKey = apiKey
   }
-};
 
-export const chatWithAI = async (
-  message: string, 
-  diaryEntries: string[], 
-  previousConversations: string[] = []
-): Promise<string> => {
-  try {
-    const context = diaryEntries.length > 0 
-      ? `User's recent diary entries: ${diaryEntries.join('\n---\n')}` 
-      : '';
-    
-    const conversationHistory = previousConversations.length > 0 
-      ? `Previous conversations: ${previousConversations.join('\n---\n')}` 
-      : '';
+  async generateResponse(prompt: string): Promise<string> {
+    if (!this.apiKey || this.apiKey === 'your_gemini_api_key_here') {
+      return 'Please add your Gemini API key to the .env file to enable AI responses.'
+    }
 
-    const prompt = `
-      You are a caring AI companion for a young person's mental wellness app. 
-      Be empathetic, supportive, and age-appropriate. Never provide medical advice.
-      
-      ${context}
-      ${conversationHistory}
-      
-      User's message: "${message}"
-      
-      Provide a helpful, encouraging response that considers their diary history and past conversations.
-    `;
-    
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
-    console.error('Error in AI chat:', error);
-    return "I'm here to listen and support you! Feel free to share what's on your mind.";
+    try {
+      const response = await fetch(`${this.baseUrl}?key=${this.apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 1024,
+          }
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Gemini API Error:', response.status, errorText)
+        throw new Error(`Gemini API error: ${response.status}`)
+      }
+
+      const data: GeminiResponse = await response.json()
+      return data.candidates[0]?.content?.parts[0]?.text || 'Sorry, I could not generate a response.'
+    } catch (error) {
+      console.error('Gemini AI Error:', error)
+      if (error instanceof Error && error.message.includes('API error')) {
+        return 'I\'m having trouble connecting to the AI service. Please check your API key and try again.'
+      }
+      return 'I apologize, but I\'m having trouble connecting right now. Please try again later.'
+    }
   }
-};
 
-export const generateWeeklyInsight = async (entries: string[]): Promise<string> => {
-  try {
-    const prompt = `
-      Based on these diary entries from a young person over the past week, 
-      provide encouraging insights and gentle suggestions for wellness.
-      Be supportive and focus on positive patterns and growth opportunities.
-      
-      Entries: ${entries.join('\n---\n')}
-      
-      Keep the response friendly and motivational, not clinical.
-    `;
+  async analyzeDiaryEntries(entries: string[], userQuery: string): Promise<string> {
+    const context = entries.slice(-10).join('\n\n---\n\n') // Last 10 entries for context
     
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
-    console.error('Error generating weekly insight:', error);
-    return "You've been doing great at expressing yourself this week! Keep up the amazing work with your journal. 🌟";
+    const prompt = `You are a compassionate mental health support AI for young people. Based on the following diary entries from a user, please provide a personalized, supportive response to their query.
+
+Previous diary entries:
+${context}
+
+User's current query: ${userQuery}
+
+Please provide:
+1. A warm, empathetic response acknowledging their feelings
+2. Insights based on patterns you notice in their diary entries
+3. Gentle, actionable suggestions for their wellbeing
+4. Encouragement and hope
+
+Keep your response supportive, non-judgmental, and age-appropriate for youth (13-24). If you detect serious mental health concerns, encourage them to speak with a trusted adult or mental health professional.`
+
+    return this.generateResponse(prompt)
   }
-};
+
+  async generateDiarySummary(entries: string[]): Promise<string> {
+    const context = entries.join('\n\n---\n\n')
+    
+    const prompt = `As a supportive mental health AI, please analyze these diary entries from a young person and provide a caring summary.
+
+Diary entries:
+${context}
+
+Please provide:
+1. A compassionate overview of their emotional journey
+2. Positive patterns and growth you notice
+3. Areas that might need attention or support
+4. Encouraging words about their self-reflection practice
+
+Keep the tone warm, hopeful, and age-appropriate for youth.`
+
+    return this.generateResponse(prompt)
+  }
+
+  async generateRecommendations(userProfile: any, recentEntries: string[]): Promise<string[]> {
+    const context = recentEntries.slice(-5).join('\n\n---\n\n')
+    
+    const prompt = `Based on this user's recent diary entries and profile, suggest 3-5 personalized wellness activities:
+
+Recent entries: ${context}
+Age range: ${userProfile.age_range || 'Not specified'}
+Preferred activities: ${userProfile.preferred_activities?.join(', ') || 'None specified'}
+Wellness goals: ${userProfile.wellness_goals?.join(', ') || 'None specified'}
+
+Provide brief, actionable recommendations suitable for youth, formatted as a simple list.`
+
+    const response = await this.generateResponse(prompt)
+    return response.split('\n').filter(line => line.trim().length > 0).slice(0, 5)
+  }
+}
+
+export const geminiAI = new GeminiAI(import.meta.env.VITE_GEMINI_API_KEY || '')
