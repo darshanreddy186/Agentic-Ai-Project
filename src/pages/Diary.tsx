@@ -1,321 +1,236 @@
-import React, { useState, useEffect } from 'react'
-import { useAuth } from '../hooks/useAuth'
-import { supabase, DiaryEntry } from '../lib/supabase'
-import { geminiAI } from '../lib/gemini'
-import { 
-  Plus, 
-  Calendar, 
-  MessageCircle, 
-  Send, 
-  BookOpen,
-  Smile,
-  Meh,
-  Frown,
-  Sparkles,
-  TrendingUp
-} from 'lucide-react'
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import { supabase, DiaryEntry } from '../lib/supabase';
+import { RichDiaryEditor } from "./RichDiaryEditor";
+import { DayPicker } from 'react-day-picker';
+import 'react-day-picker/dist/style.css';
+import { format } from 'date-fns';
+import { Calendar as CalendarIcon, BookOpen } from 'lucide-react';
 
+// --- INTERFACES & TYPES ---
+interface Notification {
+  message: string;
+  description?: string;
+  type: 'success' | 'error';
+}
+
+// --- HELPER FUNCTIONS ---
+const getToday = (): Date => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Normalize to the start of the day
+  return today;
+};
+
+// --- MAIN COMPONENT ---
 export function Diary() {
-  const { user } = useAuth()
-  const [entries, setEntries] = useState<DiaryEntry[]>([])
-  const [showForm, setShowForm] = useState(false)
-  const [showChat, setShowChat] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [formData, setFormData] = useState({
-    title: '',
-    content: '',
-    mood_score: 5,
-    tags: [] as string[]
-  })
-  const [chatQuery, setChatQuery] = useState('')
-  const [chatResponse, setChatResponse] = useState('')
-  const [chatLoading, setChatLoading] = useState(false)
+  const { user } = useAuth();
+  const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [diaryHtml, setDiaryHtml] = useState("<p></p>");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(getToday());
+  const [editMode, setEditMode] = useState(false);
+  const [notification, setNotification] = useState<Notification | null>(null);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  const selectedEntry = entries.find(entry => new Date(entry.created_at).toDateString() === selectedDate.toDateString());
 
   useEffect(() => {
     if (user) {
-      loadEntries()
+      loadEntries();
     }
-  }, [user])
+  }, [user]);
+
+  useEffect(() => {
+    if (selectedEntry) {
+      setDiaryHtml(selectedEntry.content);
+      setEditMode(false);
+    } else {
+      setDiaryHtml("<p>What's on your mind today?</p>");
+      setEditMode(true);
+    }
+  }, [selectedDate, selectedEntry, entries]);
 
   const loadEntries = async () => {
+    if (!user) return;
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('diary_entries')
         .select('*')
-        .eq('user_id', user!.id)
-        .order('created_at', { ascending: false })
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
-      if (error) throw error
-      setEntries(data || [])
-    } catch (error) {
-      console.error('Error loading entries:', error)
+      if (error) throw error;
+      setEntries(data || []);
+    } catch (error: any) {
+      showNotification({ message: "Error loading entries", description: error.message, type: "error" });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const showNotification = (notif: Notification) => {
+    setNotification(notif);
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date) {
+        const normalizedDate = new Date(date);
+        normalizedDate.setHours(0, 0, 0, 0);
+        setSelectedDate(normalizedDate);
+    }
+    setIsCalendarOpen(false);
+  };
+
+  const handleSaveEntry = async () => {
+    if (!user) return;
+    setSaving(true);
     try {
-      const { data, error } = await supabase
-        .from('diary_entries')
-        .insert([
-          {
-            user_id: user!.id,
-            title: formData.title,
-            content: formData.content,
-            mood_score: formData.mood_score,
-            tags: formData.tags
-          }
-        ])
-        .select()
-        .single()
+        const entryData = {
+            user_id: user.id,
+            title: `Entry for ${format(selectedDate, 'PPP')}`,
+            content: diaryHtml,
+            mood_score: 5,
+            tags: [],
+            created_at: selectedDate.toISOString()
+        };
 
-      if (error) throw error
+        let error;
 
-      setEntries([data, ...entries])
-      setFormData({ title: '', content: '', mood_score: 5, tags: [] })
-      setShowForm(false)
-    } catch (error) {
-      console.error('Error saving entry:', error)
+        if (selectedEntry) {
+            const { error: updateError } = await supabase
+                .from('diary_entries')
+                .update({ content: entryData.content, title: entryData.title })
+                .eq('id', selectedEntry.id);
+            error = updateError;
+        } else {
+            const { error: insertError } = await supabase
+                .from('diary_entries')
+                .insert(entryData);
+            error = insertError;
+        }
+
+        if (error) throw error;
+
+        showNotification({ message: "Entry Saved!", type: "success" });
+        setEditMode(false);
+        await loadEntries(); // Refresh entries
+    } catch (error: any) {
+        showNotification({ message: "Error saving entry", description: error.message, type: "error" });
+    } finally {
+        setSaving(false);
     }
-  }
+  };
 
-  const handleChatQuery = async () => {
-    if (!chatQuery.trim() || entries.length === 0) return
+  // --- NEWLY IMPLEMENTED FUNCTIONS ---
+
+  const handleSaveMemory = async (memory: { imageUrl: string; context: string; mood: string }) => {
+    if (!user) return;
     
-    setChatLoading(true)
-    setChatResponse('')
-    try {
-      const entryContents = entries.map(entry => `Title: ${entry.title}\nContent: ${entry.content}\nMood: ${entry.mood_score}/10\nDate: ${entry.created_at}`)
-      const response = await geminiAI.analyzeDiaryEntries(entryContents, chatQuery)
-      setChatResponse(response)
-      setChatQuery('')
-    } catch (error) {
-      console.error('Error getting AI response:', error)
-      setChatResponse('Sorry, I encountered an error. Please try again.')
-    } finally {
-      setChatLoading(false)
+    // Ensure the entry for the selected date exists before saving a memory
+    if (!selectedEntry) {
+      showNotification({ message: "Save the diary entry first!", description: "Memories can only be added to a saved entry.", type: "error" });
+      return;
     }
-  }
 
-  const getMoodIcon = (score: number) => {
-    if (score >= 7) return <Smile className="w-5 h-5 text-green-500" />
-    if (score >= 4) return <Meh className="w-5 h-5 text-yellow-500" />
-    return <Frown className="w-5 h-5 text-red-500" />
-  }
+    const { error } = await supabase.from('memories').insert({ 
+        user_id: user.id, 
+        diary_entry_id: selectedEntry.id, 
+        ...memory 
+    });
 
-  const getMoodColor = (score: number) => {
-    if (score >= 7) return 'bg-green-100 text-green-800'
-    if (score >= 4) return 'bg-yellow-100 text-yellow-800'
-    return 'bg-red-100 text-red-800'
-  }
+    if (error) {
+        showNotification({ message: "Could not save memory", description: error.message, type: "error" });
+    }
+    // No success notification here, as the modal in the editor handles it.
+  };
+
+  const handleDeleteImage = async (imageUrl: string) => {
+    const fileName = imageUrl.split('/').pop();
+    if (!fileName) return;
+
+    // We can't guarantee a memory was saved, so we use `rpc` to be safe
+    await supabase.storage.from('diary_images').remove([fileName]);
+    await supabase.from('memories').delete().eq('image_url', imageUrl);
+    
+    showNotification({ message: "Image deleted", type: 'success' });
+    // After deleting, you might want to refresh the entry content from the DB
+    await loadEntries();
+  };
+
+
+  const isFuture = selectedDate > getToday();
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-zinc-900"></div>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="bg-white rounded-lg p-6 shadow-md border border-blue-100">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Personal Diary</h1>
-            <p className="text-gray-600">Express your thoughts, track your mood, and reflect on your journey</p>
-          </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => setShowChat(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              <MessageCircle className="w-4 h-4" />
-              <span>Chat with AI</span>
-            </button>
-            <button
-              onClick={() => setShowForm(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>New Entry</span>
-            </button>
+    <div className="relative min-h-screen bg-white p-4 md:p-8">
+      {notification && (
+        <div className={`fixed top-5 right-5 w-80 p-4 rounded-lg shadow-2xl text-white z-[100] ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
+          <p className="font-bold">{notification.message}</p>
+          {notification.description && <p className="text-sm">{notification.description}</p>}
+        </div>
+      )}
+
+      {isCalendarOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setIsCalendarOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-lg shadow-2xl">
+            <DayPicker mode="single" selected={selectedDate} onSelect={handleDateSelect} disabled={{ after: getToday() }} initialFocus styles={{ caption: { color: '#4f46e5', fontWeight: 'bold' }, head: { color: '#4f46e5' } }} modifiersClassNames={{ selected: 'bg-indigo-600 text-white hover:bg-indigo-700', today: 'font-bold text-indigo-600' }}/>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* New Entry Form */}
-      {showForm && (
-        <div className="bg-white rounded-lg p-6 shadow-md border border-blue-100">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">New Diary Entry</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Title
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="How are you feeling today?"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Your thoughts
-              </label>
-              <textarea
-                required
-                rows={6}
-                value={formData.content}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Write about your day, feelings, or anything on your mind..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Mood Score (1-10)
-              </label>
-              <div className="flex items-center space-x-4">
-                <input
-                  type="range"
-                  min="1"
-                  max="10"
-                  value={formData.mood_score}
-                  onChange={(e) => setFormData({ ...formData, mood_score: parseInt(e.target.value) })}
-                  className="flex-1"
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white border border-zinc-200 rounded-lg shadow-lg">
+          <div className="p-6 flex justify-between items-center">
+            <h1 className="text-4xl font-serif text-zinc-800">Dear Diary...</h1>
+            <button onClick={() => setIsCalendarOpen(true)} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium bg-white border rounded-md hover:bg-zinc-100 text-zinc-700">
+              <CalendarIcon className="w-4 h-4 mr-2" />
+              <span>{format(selectedDate, 'PPP')}</span>
+            </button>
+          </div>
+          <div className="p-6 pt-0">
+            {isFuture ? (
+                <div className="p-4 text-center text-red-100 bg-red-600 rounded-md">
+                    You cannot write about the future... yet!
+                </div>
+            ) : (
+                <RichDiaryEditor
+                    content={diaryHtml}
+                    isEditable={editMode}
+                    onChange={setDiaryHtml}
+                    onSaveMemory={handleSaveMemory}
+                    onDeleteImage={handleDeleteImage}
+                    showNotification={showNotification}
                 />
-                <div className="flex items-center space-x-2">
-                  {getMoodIcon(formData.mood_score)}
-                  <span className="font-medium">{formData.mood_score}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Save Entry
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* AI Chat */}
-      {showChat && (
-        <div className="bg-white rounded-lg p-6 shadow-md border border-purple-100">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-              <Sparkles className="w-5 h-5 mr-2 text-purple-600" />
-              Chat with AI Assistant
-            </h2>
-            <button
-              onClick={() => setShowChat(false)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              ×
-            </button>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={chatQuery}
-                onChange={(e) => setChatQuery(e.target.value)}
-                placeholder="Ask me anything about your diary entries or mental wellness..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                onKeyPress={(e) => e.key === 'Enter' && handleChatQuery()}
-              />
-              <button
-                onClick={handleChatQuery}
-                disabled={chatLoading || !chatQuery.trim()}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </div>
-
-            {chatLoading && (
-              <div className="flex items-center space-x-2 text-gray-600">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
-                <span>AI is thinking...</span>
-              </div>
             )}
-
-            {chatResponse && (
-              <div className="bg-purple-50 rounded-lg p-4">
-                <p className="text-gray-800 whitespace-pre-wrap">{chatResponse}</p>
+            {!isFuture && (
+              <div className="pt-4 flex gap-2">
+                {editMode ? (
+                  <>
+                    <button onClick={handleSaveEntry} disabled={saving} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-md hover:bg-zinc-800 disabled:opacity-50">
+                      {saving ? "Saving..." : "Save Entry"}
+                    </button>
+                    {selectedEntry && (
+                      <button onClick={() => { setEditMode(false); setDiaryHtml(selectedEntry.content); }} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium bg-transparent border rounded-md hover:bg-zinc-100">Cancel</button>
+                    )}
+                  </>
+                ) : (
+                  selectedEntry && <button onClick={() => setEditMode(true)} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-md hover:bg-zinc-800">Edit Entry</button>
+                )}
               </div>
             )}
           </div>
         </div>
-      )}
-
-      {/* Entries List */}
-      <div className="space-y-6">
-        {entries.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow-md border border-blue-100">
-            <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No entries yet</h3>
-            <p className="text-gray-600 mb-4">Start your wellness journey by writing your first diary entry</p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Write First Entry
-            </button>
-          </div>
-        ) : (
-          entries.map((entry) => (
-            <div key={entry.id} className="bg-white rounded-lg p-6 shadow-md border border-blue-100">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xl font-semibold text-gray-900">{entry.title}</h3>
-                <div className="flex items-center space-x-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getMoodColor(entry.mood_score)}`}>
-                    {getMoodIcon(entry.mood_score)}
-                    <span className="ml-1">{entry.mood_score}/10</span>
-                  </span>
-                  <span className="text-sm text-gray-500">
-                    {new Date(entry.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-              <p className="text-gray-700 whitespace-pre-wrap">{entry.content}</p>
-              {entry.tags && entry.tags.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {entry.tags.map((tag, index) => (
-                    <span
-                      key={index}
-                      className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded-full"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))
-        )}
       </div>
     </div>
-  )
-}
+  );
+};

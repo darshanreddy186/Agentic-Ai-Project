@@ -12,6 +12,8 @@ export const supabase = createClient(
   supabaseAnonKey || 'placeholder-key'
 )
 
+// --- TYPE DEFINITIONS ---
+
 export type DiaryEntry = {
   id: string
   user_id: string
@@ -51,3 +53,40 @@ export type UserProfile = {
   created_at: string
   updated_at: string
 }
+
+
+// --- STORAGE HELPER FUNCTION ---
+
+/**
+ * Uploads a file to a specified Supabase storage bucket.
+ * @param file The file to upload.
+ * @param bucketName The name of the storage bucket (e.g., 'diary_images').
+ * @returns The public URL of the uploaded file.
+ * @throws An error if the upload fails.
+ */
+export const uploadImage = async (file: File, bucketName: string): Promise<string> => {
+  // 1. Create a unique file name to avoid overwriting files
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random()}-${Date.now()}.${fileExt}`;
+  
+  // 2. Upload the file to the specified bucket
+  const { error: uploadError } = await supabase.storage
+    .from(bucketName)
+    .upload(fileName, file);
+
+  if (uploadError) {
+    console.error('Error uploading file:', uploadError);
+    throw uploadError;
+  }
+
+  // 3. Get the public URL of the newly uploaded file
+  const { data } = supabase.storage
+    .from(bucketName)
+    .getPublicUrl(fileName);
+
+  if (!data || !data.publicUrl) {
+    throw new Error('Could not get public URL for the uploaded file.');
+  }
+
+  return data.publicUrl;
+};
