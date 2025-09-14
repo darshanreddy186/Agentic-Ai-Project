@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase, DiaryEntry } from '../lib/supabase';
 import { RichDiaryEditor } from "./RichDiaryEditor";
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, BookOpen } from 'lucide-react';
+import { Calendar as CalendarIcon } from 'lucide-react';
 
 // --- INTERFACES & TYPES ---
 interface Notification {
@@ -17,7 +17,7 @@ interface Notification {
 // --- HELPER FUNCTIONS ---
 const getToday = (): Date => {
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize to the start of the day
+  today.setHours(0, 0, 0, 0);
   return today;
 };
 
@@ -116,7 +116,7 @@ export function Diary() {
 
         showNotification({ message: "Entry Saved!", type: "success" });
         setEditMode(false);
-        await loadEntries(); // Refresh entries
+        await loadEntries();
     } catch (error: any) {
         showNotification({ message: "Error saving entry", description: error.message, type: "error" });
     } finally {
@@ -124,12 +124,9 @@ export function Diary() {
     }
   };
 
-  // --- NEWLY IMPLEMENTED FUNCTIONS ---
-
   const handleSaveMemory = async (memory: { imageUrl: string; context: string; mood: string }) => {
     if (!user) return;
     
-    // Ensure the entry for the selected date exists before saving a memory
     if (!selectedEntry) {
       showNotification({ message: "Save the diary entry first!", description: "Memories can only be added to a saved entry.", type: "error" });
       return;
@@ -144,22 +141,9 @@ export function Diary() {
     if (error) {
         showNotification({ message: "Could not save memory", description: error.message, type: "error" });
     }
-    // No success notification here, as the modal in the editor handles it.
   };
 
-  const handleDeleteImage = async (imageUrl: string) => {
-    const fileName = imageUrl.split('/').pop();
-    if (!fileName) return;
-
-    // We can't guarantee a memory was saved, so we use `rpc` to be safe
-    await supabase.storage.from('diary_images').remove([fileName]);
-    await supabase.from('memories').delete().eq('image_url', imageUrl);
-    
-    showNotification({ message: "Image deleted", type: 'success' });
-    // After deleting, you might want to refresh the entry content from the DB
-    await loadEntries();
-  };
-
+  // The handleDeleteImage function is no longer needed here.
 
   const isFuture = selectedDate > getToday();
 
@@ -208,7 +192,7 @@ export function Diary() {
                     isEditable={editMode}
                     onChange={setDiaryHtml}
                     onSaveMemory={handleSaveMemory}
-                    onDeleteImage={handleDeleteImage}
+                    // onDeleteImage prop is removed
                     showNotification={showNotification}
                 />
             )}
