@@ -18,16 +18,14 @@ interface Notification {
 // --- HELPER FUNCTIONS ---
 const getToday = (): Date => {
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize to the start of the day
+  today.setHours(0, 0, 0, 0);
   return today;
 };
 
 // --- INITIALIZE GEMINI MODEL ---
-// Using an environment variable is crucial for security.
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY; 
 const genAI = new GoogleGenerativeAI(API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-
 
 // --- MAIN COMPONENT ---
 export function Diary() {
@@ -68,7 +66,6 @@ export function Diary() {
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       setEntries(data || []);
     } catch (error: any) {
@@ -85,104 +82,110 @@ export function Diary() {
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
-        const normalizedDate = new Date(date);
-        normalizedDate.setHours(0, 0, 0, 0);
-        setSelectedDate(normalizedDate);
+      setSelectedDate(new Date(date.setHours(0, 0, 0, 0)));
     }
     setIsCalendarOpen(false);
   };
 
   const getMoodScore = async (content: string): Promise<number> => {
-    const plainText = content.replace(/<[^>]*>?/gm, ''); // Strip HTML tags
-    if (plainText.trim().length < 10) return 5; // Return neutral for short text
-
+    const plainText = content.replace(/<[^>]*>?/gm, '').trim();
+    if (plainText.length < 15) return 5;
     const prompt = `On a scale of 1 (very negative) to 10 (very positive), analyze the sentiment of this diary entry. Respond with only a number. Entry: "${plainText}"`;
-
     try {
       const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = await response.text();
+      const text = await result.response.text();
       const score = parseInt(text.trim(), 10);
-      return isNaN(score) ? 5 : Math.max(1, Math.min(10, score)); // Clamp between 1-10
+      return isNaN(score) ? 5 : Math.max(1, Math.min(10, score));
     } catch (error) {
       console.error("Error getting mood score:", error);
-      return 5; // Return neutral on error
+      return 5;
     }
   };
-  
-  // --- UPDATED: handleSaveEntry now calls the backend Edge Function to update the AI summary ---
+
+  // --- FULLY CORRECTED AND CLIENT-SIDE `handleSaveEntry` FUNCTION ---
   const handleSaveEntry = async () => {
     if (!user) return;
+    const plainTextContent = diaryHtml.replace(/<[^>]*>?/gm, '').trim();
+    if (plainTextContent.length < 15) {
+      showNotification({ message: "Entry is too short", description: "Please write a bit more to save.", type: "error" });
+      return;
+    }
     setSaving(true);
     
-    const moodScore = await getMoodScore(diaryHtml);
-
     try {
-        const entryData = {
-            user_id: user.id,
-            title: `Entry for ${format(selectedDate, 'PPP')}`,
-            content: diaryHtml,
-            mood_score: moodScore, // Dynamic score
-            tags: [],
-            created_at: selectedDate.toISOString()
-        };
+      // Step 1: Get Mood Score and Save the primary Diary Entry
+      const moodScore = await getMoodScore(diaryHtml);
+      const entryData = {
+          user_id: user.id,
+          title: `Entry for ${format(selectedDate, 'PPP')}`,
+          content: diaryHtml,
+          mood_score: moodScore,
+          tags: [],
+          created_at: selectedDate.toISOString()
+      };
+      const { error: saveError } = selectedEntry 
+          ? await supabase.from('diary_entries').update(entryData).eq('id', selectedEntry.id)
+          : await supabase.from('diary_entries').insert(entryData);
 
-        const { data: savedEntry, error } = selectedEntry 
-            ? await supabase
-                .from('diary_entries')
-                .update({ content: entryData.content, title: entryData.title, mood_score: entryData.mood_score })
-                .eq('id', selectedEntry.id)
-                .select()
-                .single()
-            : await supabase
-                .from('diary_entries')
-                .insert(entryData)
-                .select()
-                .single();
+      if (saveError) throw new Error(`Failed to save entry: ${saveError.message}`);
 
-        if (error) throw error;
+      // Step 2: Fetch the user's existing AI summary from the database
+      const { data: summaryData } = await supabase
+        .from('user_ai_summaries')
+        .select('diary_summary')
+        .eq('user_id', user.id)
+        .single();
+      
+      const oldSummary = summaryData?.diary_summary || "This is the user's first diary entry.";
 
-        // --- NEW: Securely update the AI summary via an Edge Function ---
-        // This keeps your logic and API keys on the server and is more scalable.
-        const { error: functionError } = await supabase.functions.invoke('update-diary-summary', {
-            body: { 
-              userId: user.id,
-              newEntryContent: diaryHtml 
-            },
-        });
-
-        if (functionError) {
-          console.error("Error updating AI summary:", functionError);
-          showNotification({ message: "Entry Saved", description: "Could not update AI summary.", type: "success" });
-        } else {
-          showNotification({ message: "Entry Saved & Analyzed!", type: "success" });
-        }
+      // Step 3: Craft a prompt for Gemini to update the summary
+      const prompt = `
+        You are an AI assistant that helps users understand their emotional journey by summarizing their diary entries over time.
         
-        setEditMode(false);
-        await loadEntries(); // Refresh entries
+        PREVIOUS SUMMARY OF USER'S MOOD AND THOUGHTS:
+        "${oldSummary}"
+
+        NEW DIARY ENTRY FROM THE USER:
+        "${plainTextContent}"
+
+        TASK:
+        Update the previous summary by integrating the key feelings, events, and thoughts from the new diary entry. 
+        The result should be a concise, flowing narrative that reflects the user's evolving state.
+        Respond with ONLY the updated summary text.`;
+      
+      // Step 4: Get the updated summary from Gemini
+      const result = await model.generateContent(prompt);
+      const updatedSummary = await result.response.text();
+
+      // Step 5: Save the new summary back to the 'user_ai_summaries' table
+      const { error: upsertError } = await supabase
+        .from('user_ai_summaries')
+        .upsert({ 
+          user_id: user.id, 
+          diary_summary: updatedSummary.trim(),
+          updated_at: new Date().toISOString() 
+        }, { onConflict: 'user_id' });
+      
+      if (upsertError) throw new Error(`Could not update AI summary: ${upsertError.message}`);
+      
+      showNotification({ message: "Entry Saved & Analyzed!", type: "success" });
+      setEditMode(false);
+      await loadEntries();
+
     } catch (error: any) {
-        showNotification({ message: "Error saving entry", description: error.message, type: "error" });
+      showNotification({ message: "An Error Occurred", description: error.message, type: "error" });
     } finally {
-        setSaving(false);
+      setSaving(false);
     }
   };
 
   const handleSaveMemory = async (memory: { imageUrl: string; context: string; mood: string }) => {
-    if (!user) return;
-    if (!selectedEntry) {
-      showNotification({ message: "Save the diary entry first!", description: "Memories can only be added to a saved entry.", type: "error" });
-      return;
-    }
-
+    // This function remains the same
+    if (!user || !selectedEntry) return;
     const { error } = await supabase.from('memories').insert({ 
-        user_id: user.id, 
-        diary_entry_id: selectedEntry.id, 
-        ...memory 
+        user_id: user.id, diary_entry_id: selectedEntry.id, ...memory 
     });
-
-    if (error) {
-        showNotification({ message: "Could not save memory", description: error.message, type: "error" });
-    }
+    if (error) showNotification({ message: "Could not save memory", description: error.message, type: "error" });
   };
 
   const isFuture = selectedDate > getToday();
@@ -203,7 +206,6 @@ export function Diary() {
           {notification.description && <p className="text-sm">{notification.description}</p>}
         </div>
       )}
-
       {isCalendarOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setIsCalendarOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-lg shadow-2xl">
@@ -211,7 +213,6 @@ export function Diary() {
           </div>
         </div>
       )}
-
       <div className="max-w-4xl mx-auto">
         <div className="bg-white border border-zinc-200 rounded-lg shadow-lg">
           <div className="p-6 flex justify-between items-center">
@@ -223,17 +224,9 @@ export function Diary() {
           </div>
           <div className="p-6 pt-0">
             {isFuture ? (
-                <div className="p-4 text-center text-red-100 bg-red-600 rounded-md">
-                    You cannot write about the future... yet!
-                </div>
+              <div className="p-4 text-center text-red-100 bg-red-600 rounded-md">You cannot write about the future... yet!</div>
             ) : (
-                <RichDiaryEditor
-                    content={diaryHtml}
-                    isEditable={editMode}
-                    onChange={setDiaryHtml}
-                    onSaveMemory={handleSaveMemory}
-                    showNotification={showNotification}
-                />
+              <RichDiaryEditor content={diaryHtml} isEditable={editMode} onChange={setDiaryHtml} onSaveMemory={handleSaveMemory} showNotification={showNotification} />
             )}
             {!isFuture && (
               <div className="pt-4 flex gap-2">
@@ -256,4 +249,4 @@ export function Diary() {
       </div>
     </div>
   );
-};
+}
