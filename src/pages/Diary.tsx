@@ -17,7 +17,7 @@ interface Notification {
 // --- HELPER FUNCTIONS ---
 const getToday = (): Date => {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0); // Normalize to the start of the day
   return today;
 };
 
@@ -116,7 +116,7 @@ export function Diary() {
 
         showNotification({ message: "Entry Saved!", type: "success" });
         setEditMode(false);
-        await loadEntries();
+        await loadEntries(); // Refresh entries
     } catch (error: any) {
         showNotification({ message: "Error saving entry", description: error.message, type: "error" });
     } finally {
@@ -124,9 +124,12 @@ export function Diary() {
     }
   };
 
+  // --- NEWLY IMPLEMENTED FUNCTIONS ---
+
   const handleSaveMemory = async (memory: { imageUrl: string; context: string; mood: string }) => {
     if (!user) return;
     
+    // Ensure the entry for the selected date exists before saving a memory
     if (!selectedEntry) {
       showNotification({ message: "Save the diary entry first!", description: "Memories can only be added to a saved entry.", type: "error" });
       return;
@@ -141,9 +144,22 @@ export function Diary() {
     if (error) {
         showNotification({ message: "Could not save memory", description: error.message, type: "error" });
     }
+    // No success notification here, as the modal in the editor handles it.
   };
 
-  // The handleDeleteImage function is no longer needed here.
+  const handleDeleteImage = async (imageUrl: string) => {
+    const fileName = imageUrl.split('/').pop();
+    if (!fileName) return;
+
+    // We can't guarantee a memory was saved, so we use `rpc` to be safe
+    await supabase.storage.from('diary_images').remove([fileName]);
+    await supabase.from('memories').delete().eq('image_url', imageUrl);
+    
+    showNotification({ message: "Image deleted", type: 'success' });
+    // After deleting, you might want to refresh the entry content from the DB
+    await loadEntries();
+  };
+
 
   const isFuture = selectedDate > getToday();
 
@@ -192,7 +208,7 @@ export function Diary() {
                     isEditable={editMode}
                     onChange={setDiaryHtml}
                     onSaveMemory={handleSaveMemory}
-                    // onDeleteImage prop is removed
+                    // onDeleteImage={handleDeleteImage}
                     showNotification={showNotification}
                 />
             )}
