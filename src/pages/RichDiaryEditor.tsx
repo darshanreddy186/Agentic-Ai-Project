@@ -1,29 +1,24 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-// Import NodeViewWrapper here
 import { useEditor, EditorContent, NodeViewProps, ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import { Image as ImageIcon, Sparkles, Loader2, X } from 'lucide-react';
 import { uploadImage, deleteImage } from '../lib/supabase';
 import './RichDiaryEditor.css';
-
-// Import the new lightbox and its styles
 import Lightbox from "yet-another-react-lightbox";
 import "yet-another-react-lightbox/styles.css";
 
 // --- TYPES & INTERFACES ---
+export interface Memory {
+  image_url: string;
+  context: string;
+  mood: string;
+}
 interface Notification {
   message: string;
   description?: string;
   type: 'success' | 'error';
 }
-
-interface Memory {
-  imageUrl: string;
-  context: string;
-  mood: string;
-}
-
 interface RichDiaryEditorProps {
   content: string;
   isEditable: boolean;
@@ -32,23 +27,19 @@ interface RichDiaryEditorProps {
   showNotification: (notification: Notification) => void;
 }
 
-// --- CUSTOM IMAGE NODE WITH DELETE BUTTON (CORRECTED) ---
+// --- CUSTOM IMAGE NODE ---
 const CustomImageNode = ({ node, deleteNode, editor }: NodeViewProps) => {
   const { src } = node.attrs;
-
   const handleDelete = async (event: React.MouseEvent) => {
-    event.stopPropagation(); // Prevent the lightbox from opening when deleting
+    event.stopPropagation();
     try {
-      await deleteImage(src); // Await the deletion from Supabase
-      deleteNode(); // Then remove from editor
+      await deleteImage(src);
+      deleteNode();
     } catch (error) {
       console.error("Failed to delete image:", error);
-      // Still remove from editor even if cloud deletion fails
       deleteNode();
     }
   };
-
-  // The entire component is wrapped in NodeViewWrapper
   return (
     <NodeViewWrapper className="image-wrapper">
       <img src={src} alt="diary entry" onClick={() => (window as any).openLightbox(src)} />
@@ -61,7 +52,7 @@ const CustomImageNode = ({ node, deleteNode, editor }: NodeViewProps) => {
   );
 };
 
-// --- MEMORY MODAL (No changes here) ---
+// --- MEMORY MODAL ---
 const useMemoryModal = (onSave: RichDiaryEditorProps['onSaveMemory'], showNotification: RichDiaryEditorProps['showNotification']) => {
   const [imageQueue, setImageQueue] = useState<string[]>([]);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
@@ -85,16 +76,15 @@ const useMemoryModal = (onSave: RichDiaryEditorProps['onSaveMemory'], showNotifi
 
   const handleSave = async () => {
     if (!currentImage || !context.trim()) {
-      showNotification({ message: "Please add some context to your memory.", type: "error" });
+      showNotification({ message: "Please add some context.", type: "error" });
       return;
     }
     setIsLoading(true);
-    await onSave({ imageUrl: currentImage, context, mood: 'Neutral' });
+    await onSave({ image_url: currentImage, context, mood: 'Neutral' });
     setIsLoading(false);
-    showNotification({ message: "Memory Saved!", type: 'success' });
     processNextImage();
   };
-
+  
   const ModalComponent = currentImage ? (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80" onMouseDown={processNextImage}>
       <div className="relative w-full max-w-lg p-6 bg-white border rounded-lg shadow-lg" onMouseDown={e => e.stopPropagation()}>
@@ -106,7 +96,7 @@ const useMemoryModal = (onSave: RichDiaryEditorProps['onSaveMemory'], showNotifi
         <div className="flex justify-end gap-2">
           <button onClick={processNextImage} className="px-4 py-2 text-sm rounded-md hover:bg-zinc-100">Skip</button>
           <button onClick={handleSave} disabled={isLoading} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm text-white bg-zinc-900 rounded-md hover:bg-zinc-800 disabled:opacity-50">
-            {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />} Save Memory
+            {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />} Add Memory
           </button>
         </div>
       </div>
@@ -116,13 +106,13 @@ const useMemoryModal = (onSave: RichDiaryEditorProps['onSaveMemory'], showNotifi
   return { open, ModalComponent };
 };
 
+
 // --- MAIN EDITOR COMPONENT ---
 export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
   const { content, isEditable, onChange, onSaveMemory, showNotification } = props;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const { open: openMemoryModal, ModalComponent } = useMemoryModal(onSaveMemory, showNotification);
-
   const [lightboxIndex, setLightboxIndex] = useState(-1);
   const [imageSources, setImageSources] = useState<{ src: string }[]>([]);
 
@@ -130,14 +120,9 @@ export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
     extensions: [
       StarterKit,
       Image.extend({
-        addNodeView() {
-          return ReactNodeViewRenderer(CustomImageNode);
-        },
+        addNodeView() { return ReactNodeViewRenderer(CustomImageNode); },
       }).configure({
-        // Add a class to the actual <img> tag for easier selection
-        HTMLAttributes: {
-          class: 'diary-image',
-        },
+        HTMLAttributes: { class: 'diary-image' },
       }),
     ],
     content,
@@ -148,7 +133,6 @@ export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
   });
   
-  // Attaching the function to the window to make it accessible from the NodeView
   useEffect(() => {
     (window as any).openLightbox = (src: string) => {
       if (!editor) return;
@@ -159,7 +143,6 @@ export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
         setLightboxIndex(newIndex);
       }
     };
-    // Cleanup function
     return () => {
       delete (window as any).openLightbox;
     }
@@ -176,13 +159,14 @@ export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
     if (!editor || files.length === 0) return;
     setIsUploading(true);
     showNotification({ message: `Uploading ${files.length} image(s)...`, type: 'success' });
-    
     try {
-      const publicUrls = await Promise.all(Array.from(files).map(file => uploadImage(file, 'diary_images')));
+      const publicUrls = await Promise.all(
+        Array.from(files).map(file => uploadImage(file, 'diary_images'))
+      );
       
-      const imageContent = publicUrls.map(url => `<img src="${url}" />`).join('');
-      editor.chain().focus().insertContentAt(editor.state.doc.content.size, imageContent).run();
-
+      const imageHTML = `<p>${publicUrls.map(url => `<img src="${url}" />`).join(' ')}</p>`;
+      
+      editor.chain().focus().insertContentAt(editor.state.doc.content.size, imageHTML).run();
       openMemoryModal(publicUrls);
     } catch (error: any) {
       showNotification({ message: 'Upload failed', description: error.message, type: 'error' });

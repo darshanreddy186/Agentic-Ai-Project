@@ -1,14 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');
 
 /* --- Main Editor Look & Feel --- */
-
 .diary-container {
-  /* A slightly off-white, paper-like background */
   background-color: #fffdf7;
 }
 
 .diary-paper {
-  /* The lined-paper effect */
   background-image: linear-gradient(to bottom, transparent 31px, #e7e5e4 32px);
   background-size: 100% 32px;
   line-height: 32px;
@@ -17,30 +14,35 @@
 }
 
 .diary-editor-prose {
-  /* The handwritten font style */
   font-family: 'Caveat', cursive;
   font-size: 24px;
   font-weight: 500;
-  color: #1c1917; /* A dark, soft black */
+  color: #1c1917;
   min-height: 500px;
 }
 
-.diary-editor-prose p {
-  /* Ensure text paragraphs are not affected by image centering */
-  margin: 0;
-  padding: 0;
+/* --- Paragraph Styling for Images vs. Text --- */
+
+/* Target any paragraph that contains our custom image wrappers */
+.diary-editor-prose p:has(.image-wrapper) {
+  /* This allows the inline-block images inside to be centered as a group */
+  text-align: center;
+}
+
+/* Ensure regular text paragraphs remain left-aligned */
+.diary-editor-prose p:not(:has(.image-wrapper)) {
   text-align: left;
 }
 
-/* --- Image Gallery Grid & Styling --- */
 
-/* This targets the Tiptap wrapper for our custom image node.
-   It's the container for each image in the gallery. */
+/* --- Image Grid & Styling --- */
+
+/* This targets the Tiptap wrapper for our custom image node. */
 .diary-editor-prose .image-wrapper {
-  display: inline-block; /* Allows images to sit side-by-side */
+  display: inline-block;
   position: relative;
   vertical-align: top;
-  width: calc(33.333% - 16px); /* Creates a 3-column layout with gaps */
+  width: calc(33.333% - 16px); /* 3-column layout with gaps */
   margin: 8px;
   border-radius: 8px;
   overflow: hidden;
@@ -54,18 +56,16 @@
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
 }
 
-/* This styles the actual <img> tag inside the wrapper */
 .diary-editor-prose .image-wrapper img {
   display: block;
   width: 100%;
-  height: 150px;       /* Gives all images a uniform height for a clean grid */
-  object-fit: cover;   /* Ensures images fill the space without distortion */
+  height: 150px;
+  object-fit: cover;
   cursor: pointer;
 }
 
-/* When the Tiptap node is selected, show a blue outline */
 .ProseMirror-selectednode .image-wrapper {
-  outline: 3px solid #4f46e5; /* Indigo color */
+  outline: 3px solid #4f46e5;
 }
 
 
@@ -75,28 +75,27 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  background-color: rgba(239, 68, 68, 0.8); /* Red-500 with transparency */
+  background-color: rgba(239, 68, 68, 0.8);
   color: white;
   border: none;
-  border-radius: 9999px; /* Fully rounded */
+  border-radius: 9999px;
   width: 28px;
   height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  opacity: 0; /* Hidden by default */
+  opacity: 0;
   transform: scale(0.8);
   transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
   z-index: 10;
 }
 
-/* Show the delete button when hovering over the image wrapper */
 .image-wrapper:hover .delete-image-button {
   opacity: 1;
   transform: scale(1);
 }
 
 .delete-image-button:hover {
-  background-color: rgb(220, 38, 38); /* Solid Red-600 on hover */
+  background-color: rgb(220, 38, 38);
 }

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase, DiaryEntry } from '../lib/supabase';
-import { RichDiaryEditor } from "./RichDiaryEditor";
+import { RichDiaryEditor, Memory } from "./RichDiaryEditor";
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 import { format } from 'date-fns';
@@ -38,6 +38,12 @@ export function Diary() {
   const [editMode, setEditMode] = useState(false);
   const [notification, setNotification] = useState<Notification | null>(null);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [memoryQueue, setMemoryQueue] = useState<Memory[]>([]);
+
+  const getDraftKey = useCallback(() => {
+    if (!user) return null;
+    return `diary-draft-${user.id}-${format(selectedDate, 'yyyy-MM-dd')}`;
+  }, [user, selectedDate]);
 
   const selectedEntry = entries.find(entry => {
     const entryDate = new Date(entry.created_at);
@@ -45,22 +51,27 @@ export function Diary() {
     return entryDate.getTime() === selectedDate.getTime();
   });
 
+  // Effect to load all entries from Supabase when the user is available
   useEffect(() => {
     if (user) {
       loadEntries();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
-
+  
+  // Effect to handle loading content when the selected date changes
   useEffect(() => {
+    const draftKey = getDraftKey();
     if (selectedEntry) {
       setDiaryHtml(selectedEntry.content);
       setEditMode(false);
-    } else {
-      setDiaryHtml("<p>What's on your mind today?</p>");
+      setMemoryQueue([]); // Clear queue for existing entry
+    } else if (draftKey) {
+      const savedDraft = localStorage.getItem(draftKey);
+      setDiaryHtml(savedDraft || "<p>What's on your mind today?</p>");
       setEditMode(true);
+      setMemoryQueue([]); // Clear queue for new day
     }
-  }, [selectedDate, entries, selectedEntry]);
+  }, [selectedDate, getDraftKey, selectedEntry]);
 
   const loadEntries = async () => {
     if (!user) return;
@@ -105,7 +116,6 @@ export function Diary() {
     }
   };
 
-  // --- THIS IS THE FULLY RESTORED FUNCTION ---
   const handleSaveEntry = async () => {
     if (!user) return;
     const plainTextContent = diaryHtml.replace(/<[^>]*>?/gm, '').trim();
@@ -116,7 +126,6 @@ export function Diary() {
     setSaving(true);
     
     try {
-      // Step 1: Save the primary Diary Entry
       const moodScore = await getMoodScore(diaryHtml);
       const entryData = { 
           user_id: user.id, 
@@ -125,38 +134,45 @@ export function Diary() {
           mood_score: moodScore, 
           created_at: selectedDate.toISOString() 
       };
-      const { error: saveError } = selectedEntry 
-          ? await supabase.from('diary_entries').update(entryData).eq('id', selectedEntry.id)
-          : await supabase.from('diary_entries').insert(entryData);
-      if (saveError) throw new Error(`Failed to save entry: ${saveError.message}`);
+      
+      let savedEntryId: string;
 
-      // Step 2: Fetch the user's old AI summary
+      if (selectedEntry) {
+        const { data, error } = await supabase.from('diary_entries').update(entryData).eq('id', selectedEntry.id).select('id').single();
+        if (error) throw new Error(`Failed to update entry: ${error.message}`);
+        savedEntryId = data.id;
+      } else {
+        const { data, error } = await supabase.from('diary_entries').insert(entryData).select('id').single();
+        if (error) throw new Error(`Failed to insert entry: ${error.message}`);
+        savedEntryId = data.id;
+      }
+
+      if (memoryQueue.length > 0) {
+        const memoriesToInsert = memoryQueue.map(mem => ({ ...mem, user_id: user.id, diary_entry_id: savedEntryId }));
+        const { error: memoryError } = await supabase.from('memories').insert(memoriesToInsert);
+        if (memoryError) showNotification({ message: "Entry saved, but failed to save memories", description: memoryError.message, type: "error" });
+      }
+
       const { data: summaryData } = await supabase.from('user_ai_summaries').select('diary_summary').eq('user_id', user.id).maybeSingle();
       const oldSummary = summaryData?.diary_summary || "This is the user's first diary entry.";
-
-      // Step 3: Generate the NEW, updated summary
-      const summaryPrompt = `You are an AI assistant that summarizes a user's diary entries over time. Update the previous summary by integrating the key feelings from the new entry. PREVIOUS SUMMARY: "${oldSummary}". NEW ENTRY: "${plainTextContent}". TASK: Respond with ONLY the updated summary text.`;
+      const summaryPrompt = `Update the previous summary by integrating the key feelings from the new entry. PREVIOUS SUMMARY: "${oldSummary}". NEW ENTRY: "${plainTextContent}". TASK: Respond with ONLY the updated summary text.`;
       const summaryResult = await model.generateContent(summaryPrompt);
       const updatedSummary = await summaryResult.response.text();
-
-      // Step 4: Use the new summary to generate NEW recommendations
       const recsPrompt = `Based on this user summary, provide exactly 5 short, actionable wellness recommendations. Format as a numbered list. SUMMARY: "${updatedSummary}"`;
       const recsResult = await model.generateContent(recsPrompt);
       const recsText = await recsResult.response.text();
       const parsedRecommendations = recsText.split('\n').map(rec => rec.replace(/^\d+\.\s*/, '').trim()).filter(rec => rec.length > 5);
-
-      // Step 5: Save BOTH the new summary and new recommendations to the database
-      const { error: upsertError } = await supabase.from('user_ai_summaries').upsert({ 
-          user_id: user.id, 
-          diary_summary: updatedSummary.trim(),
-          recommendations: parsedRecommendations.slice(0, 5),
-          updated_at: new Date().toISOString() 
-        }, { onConflict: 'user_id' });
-      
+      const { error: upsertError } = await supabase.from('user_ai_summaries').upsert({ user_id: user.id, diary_summary: updatedSummary.trim(), recommendations: parsedRecommendations.slice(0, 5), updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
       if (upsertError) throw new Error(`Could not update AI data: ${upsertError.message}`);
+      
+      const draftKey = getDraftKey();
+      if (draftKey) {
+        localStorage.removeItem(draftKey);
+      }
       
       showNotification({ message: "Entry Saved & Analyzed!", type: "success" });
       setEditMode(false);
+      setMemoryQueue([]); // Clear the queue AFTER a successful save
       await loadEntries();
 
     } catch (error: any) {
@@ -166,17 +182,17 @@ export function Diary() {
     }
   };
 
-  const handleSaveMemory = async (memory: { imageUrl: string; context: string; mood: string }) => {
-    // Logic to find the correct entry is now more robust
-    if (!user) return;
-    const entryToUpdate = selectedEntry || entries.find(entry => new Date(entry.created_at).toDateString() === selectedDate.toDateString());
-
-    if (!entryToUpdate) {
-        showNotification({ message: "Save the entry first", description: "You must save the diary entry before you can add memories to it.", type: "error"});
-        return;
-    };
-    const { error } = await supabase.from('memories').insert({ user_id: user.id, diary_entry_id: entryToUpdate.id, ...memory });
-    if (error) showNotification({ message: "Could not save memory", description: error.message, type: "error" });
+  const handleSaveMemory = async (memory: Memory) => {
+    setMemoryQueue(prevQueue => [...prevQueue, memory]);
+    showNotification({ message: "Memory added", description: "It will be saved with your entry.", type: "success" });
+  };
+  
+  const handleContentChange = (newContent: string) => {
+    setDiaryHtml(newContent);
+    const draftKey = getDraftKey();
+    if (draftKey && (editMode || !selectedEntry)) {
+      localStorage.setItem(draftKey, newContent);
+    }
   };
 
   const isFuture = selectedDate > getToday();
@@ -217,7 +233,7 @@ export function Diary() {
             {isFuture ? (
               <div className="p-4 text-center text-red-100 bg-red-600 rounded-md">You cannot write about the future... yet!</div>
             ) : (
-              <RichDiaryEditor content={diaryHtml} isEditable={editMode} onChange={setDiaryHtml} onSaveMemory={handleSaveMemory} showNotification={showNotification} />
+              <RichDiaryEditor content={diaryHtml} isEditable={editMode} onChange={handleContentChange} onSaveMemory={handleSaveMemory} showNotification={showNotification} />
             )}
             {!isFuture && (
               <div className="pt-4 flex gap-2">
