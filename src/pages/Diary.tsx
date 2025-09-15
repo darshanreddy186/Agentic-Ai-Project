@@ -25,7 +25,7 @@ const getToday = (): Date => {
 // --- INITIALIZE GEMINI MODEL ---
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY; 
 const genAI = new GoogleGenerativeAI(API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // --- MAIN COMPONENT ---
 export function Diary() {
@@ -39,12 +39,17 @@ export function Diary() {
   const [notification, setNotification] = useState<Notification | null>(null);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
-  const selectedEntry = entries.find(entry => new Date(entry.created_at).toDateString() === selectedDate.toDateString());
+  const selectedEntry = entries.find(entry => {
+    const entryDate = new Date(entry.created_at);
+    entryDate.setHours(0,0,0,0);
+    return entryDate.getTime() === selectedDate.getTime();
+  });
 
   useEffect(() => {
     if (user) {
       loadEntries();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
@@ -55,7 +60,7 @@ export function Diary() {
       setDiaryHtml("<p>What's on your mind today?</p>");
       setEditMode(true);
     }
-  }, [selectedDate, entries]);
+  }, [selectedDate, entries, selectedEntry]);
 
   const loadEntries = async () => {
     if (!user) return;
@@ -78,7 +83,9 @@ export function Diary() {
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
-      setSelectedDate(new Date(date.setHours(0, 0, 0, 0)));
+      const newDate = new Date(date);
+      newDate.setHours(0,0,0,0);
+      setSelectedDate(newDate);
     }
     setIsCalendarOpen(false);
   };
@@ -98,7 +105,7 @@ export function Diary() {
     }
   };
 
-  // --- UPDATED: `handleSaveEntry` now generates and saves recommendations ---
+  // --- THIS IS THE FULLY RESTORED FUNCTION ---
   const handleSaveEntry = async () => {
     if (!user) return;
     const plainTextContent = diaryHtml.replace(/<[^>]*>?/gm, '').trim();
@@ -111,7 +118,13 @@ export function Diary() {
     try {
       // Step 1: Save the primary Diary Entry
       const moodScore = await getMoodScore(diaryHtml);
-      const entryData = { user_id: user.id, title: `Entry for ${format(selectedDate, 'PPP')}`, content: diaryHtml, mood_score: moodScore, tags: [], created_at: selectedDate.toISOString() };
+      const entryData = { 
+          user_id: user.id, 
+          title: `Entry for ${format(selectedDate, 'PPP')}`, 
+          content: diaryHtml, 
+          mood_score: moodScore, 
+          created_at: selectedDate.toISOString() 
+      };
       const { error: saveError } = selectedEntry 
           ? await supabase.from('diary_entries').update(entryData).eq('id', selectedEntry.id)
           : await supabase.from('diary_entries').insert(entryData);
@@ -136,7 +149,7 @@ export function Diary() {
       const { error: upsertError } = await supabase.from('user_ai_summaries').upsert({ 
           user_id: user.id, 
           diary_summary: updatedSummary.trim(),
-          recommendations: parsedRecommendations.slice(0, 5), // Ensure it's an array of 5
+          recommendations: parsedRecommendations.slice(0, 5),
           updated_at: new Date().toISOString() 
         }, { onConflict: 'user_id' });
       
@@ -154,8 +167,15 @@ export function Diary() {
   };
 
   const handleSaveMemory = async (memory: { imageUrl: string; context: string; mood: string }) => {
-    if (!user || !selectedEntry) return;
-    const { error } = await supabase.from('memories').insert({ user_id: user.id, diary_entry_id: selectedEntry.id, ...memory });
+    // Logic to find the correct entry is now more robust
+    if (!user) return;
+    const entryToUpdate = selectedEntry || entries.find(entry => new Date(entry.created_at).toDateString() === selectedDate.toDateString());
+
+    if (!entryToUpdate) {
+        showNotification({ message: "Save the entry first", description: "You must save the diary entry before you can add memories to it.", type: "error"});
+        return;
+    };
+    const { error } = await supabase.from('memories').insert({ user_id: user.id, diary_entry_id: entryToUpdate.id, ...memory });
     if (error) showNotification({ message: "Could not save memory", description: error.message, type: "error" });
   };
 
@@ -180,7 +200,7 @@ export function Diary() {
       {isCalendarOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setIsCalendarOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-lg shadow-2xl">
-            <DayPicker mode="single" selected={selectedDate} onSelect={handleDateSelect} disabled={{ after: getToday() }} initialFocus styles={{ caption: { color: '#4f46e5', fontWeight: 'bold' }, head: { color: '#4f46e5' } }} modifiersClassNames={{ selected: 'bg-indigo-600 text-white hover:bg-indigo-700', today: 'font-bold text-indigo-600' }}/>
+            <DayPicker mode="single" selected={selectedDate} onSelect={handleDateSelect} disabled={{ after: getToday() }} initialFocus styles={{ caption: { color: '#4f46e5', fontWeight: 'bold' }, head: { color: '#4f4e5' } }} modifiersClassNames={{ selected: 'bg-indigo-600 text-white hover:bg-indigo-700', today: 'font-bold text-indigo-600' }}/>
           </div>
         </div>
       )}

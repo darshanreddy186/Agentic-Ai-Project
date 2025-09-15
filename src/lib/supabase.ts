@@ -90,3 +90,30 @@ export const uploadImage = async (file: File, bucketName: string): Promise<strin
 
   return data.publicUrl;
 };
+
+// **NEW FUNCTION TO ADD**
+// This function extracts the file name from the public URL and deletes it from the bucket.
+export const deleteImage = async (publicUrl: string): Promise<void> => {
+  try {
+    // A typical Supabase public URL looks like:
+    // https://<project-ref>.supabase.co/storage/v1/object/public/<bucket-name>/<file-name>
+    const urlParts = publicUrl.split('/');
+    const bucket = urlParts[urlParts.length - 2];
+    const fileName = urlParts[urlParts.length - 1];
+
+    if (!bucket || !fileName) {
+      throw new Error("Could not parse bucket or file name from URL.");
+    }
+    
+    const { error } = await supabase.storage.from(bucket).remove([fileName]);
+    
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error("Error deleting image from Supabase Storage:", error);
+    // We don't re-throw the error here to allow the image to be removed 
+    // from the editor even if the storage deletion fails. You could add
+    // more robust error handling here if needed.
+  }
+};

@@ -1,22 +1,67 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
+// Import NodeViewWrapper here
+import { useEditor, EditorContent, NodeViewProps, ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-// 1. Import the standard Image extension from Tiptap
-import Image from '@tiptap/extension-image'; 
-import { Image as ImageIcon, Sparkles, Loader2 } from 'lucide-react';
-import { uploadImage } from '../lib/supabase';
-import './RichDiaryEditor.css'; // You may need to adjust styles for a simple <img> tag
+import Image from '@tiptap/extension-image';
+import { Image as ImageIcon, Sparkles, Loader2, X } from 'lucide-react';
+import { uploadImage, deleteImage } from '../lib/supabase';
+import './RichDiaryEditor.css';
 
-// --- TYPES & INTERFACES (Simplified) ---
+// Import the new lightbox and its styles
+import Lightbox from "yet-another-react-lightbox";
+import "yet-another-react-lightbox/styles.css";
+
+// --- TYPES & INTERFACES ---
+interface Notification {
+  message: string;
+  description?: string;
+  type: 'success' | 'error';
+}
+
+interface Memory {
+  imageUrl: string;
+  context: string;
+  mood: string;
+}
+
 interface RichDiaryEditorProps {
   content: string;
   isEditable: boolean;
   onChange: (htmlContent: string) => void;
-  onSaveMemory: (memory: { imageUrl: string; context: string; mood: string }) => Promise<void>;
-  showNotification: (notification: { message: string; description?: string; type: 'success' | 'error' }) => void;
+  onSaveMemory: (memory: Memory) => Promise<void>;
+  showNotification: (notification: Notification) => void;
 }
 
-// --- MEMORY MODAL (No changes here, it's still useful) ---
+// --- CUSTOM IMAGE NODE WITH DELETE BUTTON (CORRECTED) ---
+const CustomImageNode = ({ node, deleteNode, editor }: NodeViewProps) => {
+  const { src } = node.attrs;
+
+  const handleDelete = async (event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent the lightbox from opening when deleting
+    try {
+      await deleteImage(src); // Await the deletion from Supabase
+      deleteNode(); // Then remove from editor
+    } catch (error) {
+      console.error("Failed to delete image:", error);
+      // Still remove from editor even if cloud deletion fails
+      deleteNode();
+    }
+  };
+
+  // The entire component is wrapped in NodeViewWrapper
+  return (
+    <NodeViewWrapper className="image-wrapper">
+      <img src={src} alt="diary entry" onClick={() => (window as any).openLightbox(src)} />
+      {editor.isEditable && (
+        <button type="button" className="delete-image-button" onClick={handleDelete}>
+          <X size={16} color="white" />
+        </button>
+      )}
+    </NodeViewWrapper>
+  );
+};
+
+// --- MEMORY MODAL (No changes here) ---
 const useMemoryModal = (onSave: RichDiaryEditorProps['onSaveMemory'], showNotification: RichDiaryEditorProps['showNotification']) => {
   const [imageQueue, setImageQueue] = useState<string[]>([]);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
@@ -26,7 +71,9 @@ const useMemoryModal = (onSave: RichDiaryEditorProps['onSaveMemory'], showNotifi
   const open = (urls: string[]) => setImageQueue(urls);
 
   useEffect(() => {
-    if (imageQueue.length > 0 && !currentImage) setCurrentImage(imageQueue[0]);
+    if (imageQueue.length > 0 && !currentImage) {
+      setCurrentImage(imageQueue[0]);
+    }
   }, [imageQueue, currentImage]);
 
   const processNextImage = () => {
@@ -49,7 +96,7 @@ const useMemoryModal = (onSave: RichDiaryEditorProps['onSaveMemory'], showNotifi
   };
 
   const ModalComponent = currentImage ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onMouseDown={processNextImage}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80" onMouseDown={processNextImage}>
       <div className="relative w-full max-w-lg p-6 bg-white border rounded-lg shadow-lg" onMouseDown={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold">Create a Memory ({imageQueue.length} left)</h2>
         <div className="py-4 space-y-4">
@@ -69,18 +116,30 @@ const useMemoryModal = (onSave: RichDiaryEditorProps['onSaveMemory'], showNotifi
   return { open, ModalComponent };
 };
 
-
 // --- MAIN EDITOR COMPONENT ---
-// We have removed all the custom node code (ImageGalleryNode, ImageGalleryComponent)
 export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
   const { content, isEditable, onChange, onSaveMemory, showNotification } = props;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const { open: openMemoryModal, ModalComponent } = useMemoryModal(onSaveMemory, showNotification);
 
+  const [lightboxIndex, setLightboxIndex] = useState(-1);
+  const [imageSources, setImageSources] = useState<{ src: string }[]>([]);
+
   const editor = useEditor({
-    // 2. Add the standard Image extension here
-    extensions: [StarterKit, Image.configure({ inline: false })],
+    extensions: [
+      StarterKit,
+      Image.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(CustomImageNode);
+        },
+      }).configure({
+        // Add a class to the actual <img> tag for easier selection
+        HTMLAttributes: {
+          class: 'diary-image',
+        },
+      }),
+    ],
     content,
     editorProps: {
       attributes: { class: 'diary-editor-prose focus:outline-none' },
@@ -88,6 +147,23 @@ export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
     editable: isEditable,
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
   });
+  
+  // Attaching the function to the window to make it accessible from the NodeView
+  useEffect(() => {
+    (window as any).openLightbox = (src: string) => {
+      if (!editor) return;
+      const sources = Array.from(editor.view.dom.querySelectorAll('img.diary-image')).map(img => ({ src: (img as HTMLImageElement).src }));
+      const newIndex = sources.findIndex(item => item.src === src);
+      if (newIndex !== -1) {
+        setImageSources(sources);
+        setLightboxIndex(newIndex);
+      }
+    };
+    // Cleanup function
+    return () => {
+      delete (window as any).openLightbox;
+    }
+  }, [editor]);
 
   useEffect(() => {
     if (editor) {
@@ -96,7 +172,6 @@ export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
     }
   }, [content, isEditable, editor]);
 
-  // 3. The addImages function is now much simpler
   const addImages = useCallback(async (files: FileList) => {
     if (!editor || files.length === 0) return;
     setIsUploading(true);
@@ -105,25 +180,25 @@ export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
     try {
       const publicUrls = await Promise.all(Array.from(files).map(file => uploadImage(file, 'diary_images')));
       
-      // Loop through the URLs and insert a standard <img> tag for each
-      publicUrls.forEach(url => {
-        editor.chain().focus().setImage({ src: url }).run();
-      });
+      const imageContent = publicUrls.map(url => `<img src="${url}" />`).join('');
+      editor.chain().focus().insertContentAt(editor.state.doc.content.size, imageContent).run();
 
       openMemoryModal(publicUrls);
-    } catch (error) {
-      showNotification({ message: 'Upload failed', type: 'error' });
+    } catch (error: any) {
+      showNotification({ message: 'Upload failed', description: error.message, type: 'error' });
     } finally {
       setIsUploading(false);
     }
   }, [editor, openMemoryModal, showNotification]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files) addImages(e.target.files); };
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) addImages(e.target.files);
+  };
 
   return (
     <div className="diary-container border border-zinc-200 rounded-lg">
       {isEditable && (
-        <div className="diary-toolbar p-2 border-b border-zinc-200">
+        <div className="diary-toolbar p-2 border-b border-zinc-200 flex items-center gap-2">
           <input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: 'none' }} accept="image/*" multiple />
           <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-zinc-200 bg-transparent h-9 px-3 hover:bg-zinc-100 disabled:opacity-50">
             {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />} Add Image(s)
@@ -132,6 +207,12 @@ export const RichDiaryEditor = (props: RichDiaryEditorProps) => {
       )}
       <EditorContent editor={editor} className="diary-paper p-4" /> 
       {ModalComponent}
+      <Lightbox
+          open={lightboxIndex > -1}
+          close={() => setLightboxIndex(-1)}
+          slides={imageSources}
+          index={lightboxIndex}
+      />
     </div>
   );
 };
