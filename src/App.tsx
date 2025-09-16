@@ -1,4 +1,3 @@
-import React from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import { Layout } from './components/Layout'
@@ -10,6 +9,7 @@ import { Relaxation } from './pages/Relaxation'
 import { Community } from './pages/Community'
 import { Profile } from './pages/Profile'; // Import Profile
 import { EditAvatar } from './pages/EditAvatar';
+import  BackgroundAnimation  from './components/BackgroundAnimation'
 
 function App() {
   const { user, loading } = useAuth()
@@ -23,10 +23,15 @@ function App() {
   }
 
   if (!user) {
-    return <Auth />
+    return <div>
+              <BackgroundAnimation />
+              <Auth />
+            </div>
   }
 
   return (
+    <div>
+    <BackgroundAnimation />
     <Router>
       <Routes>
         <Route path="/" element={<Layout />}>
@@ -40,6 +45,7 @@ function App() {
         </Route>
       </Routes>
     </Router>
+    </div>
   )
 }
 
