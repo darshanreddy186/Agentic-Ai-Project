@@ -2,6 +2,7 @@ import React, { useState, useEffect, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { BookOpen, Users, Camera, Send, ChevronLeft, ChevronRight, Sparkles, TrendingUp, Heart, Brain } from 'lucide-react';
+import { PersonalizedRecommendations } from '../components/PersonalizedRecommendations.tsx'; // Make sure this path is correct
 
 // --- Type Definitions for our data structures ---
 interface Story {
@@ -10,14 +11,6 @@ interface Story {
   image: string;
   category: string;
   readTime: string;
-}
-
-interface Recommendation {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  category: string;
-  color: string;
 }
 
 // --- Mock Data ---
@@ -53,127 +46,6 @@ const mockStories: Story[] = [
 ];
 
 // --- Components ---
-
-// Enhanced PersonalizedRecommendations component with data fetching simulation
-function PersonalizedRecommendations() {
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Simulate fetching data from a database
-  useEffect(() => {
-    const fetchRecommendations = () => {
-      // In a real app, you would make an API call here.
-      // For now, we'll use mock data after a short delay.
-      setTimeout(() => {
-        const dataFromDb: Recommendation[] = [
-          {
-            icon: <Brain className="w-6 h-6" />,
-            title: "**Morning Mindfulness Ritual**",
-            description: "Start your day with a **5-minute meditation** to set positive intentions. Research shows this can improve focus by **40%** and reduce stress levels significantly.",
-            category: "Mental Wellness",
-            color: "from-purple-500 to-pink-500"
-          },
-          {
-            icon: <Heart className="w-6 h-6" />,
-            title: "**Gratitude Journal Challenge**",
-            description: "Write down **3 things** you're grateful for each evening. Studies indicate this simple practice can boost happiness by **25%** within just one week.",
-            category: "Emotional Health",
-            color: "from-rose-500 to-orange-500"
-          },
-          {
-            icon: <TrendingUp className="w-6 h-6" />,
-            title: "**Progress Tracking**",
-            description: "You've completed **12 wellness activities** this month! Your consistency is **improving by 15%** each week. Keep up the amazing work!",
-            category: "Achievement",
-            color: "from-green-500 to-teal-500"
-          }
-        ];
-        setRecommendations(dataFromDb);
-        setLoading(false);
-      }, 1500); // Simulate network delay
-    };
-
-    fetchRecommendations();
-  }, []);
-
-  const renderText = (text: string) => {
-    return text.split('**').map((part, index) =>
-      index % 2 === 0 ? part : <strong key={index} className="font-bold text-gray-900">{part}</strong>
-    );
-  };
-
-  if (loading) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <Sparkles className="w-6 h-6 text-yellow-500" />
-                Personalized for You
-            </h2>
-            {/* Loading Skeleton */}
-            {[...Array(3)].map((_, index) => (
-                <div key={index} className="bg-white p-6 rounded-2xl shadow-lg animate-pulse">
-                    <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
-                        <div className="flex-1 space-y-3">
-                            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                            <div className="h-4 bg-gray-200 rounded w-full"></div>
-                            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                        </div>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
-
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Sparkles className="w-6 h-6 text-yellow-500" />
-          Personalized for You
-        </h2>
-        <span className="px-3 py-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-sm rounded-full font-medium">
-          AI Powered
-        </span>
-      </div>
-
-      <div className="grid gap-4">
-        {recommendations.map((rec, index) => (
-          <div key={index} className="group relative overflow-hidden bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 border border-gray-100">
-            <div className={`absolute top-0 left-0 w-1 h-full bg-gradient-to-b ${rec.color}`}></div>
-            <div className="p-6">
-              <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-xl bg-gradient-to-r ${rec.color} text-white shadow-lg`}>
-                  {rec.icon}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {renderText(rec.title)}
-                    </h3>
-                    <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">
-                      {rec.category}
-                    </span>
-                  </div>
-                  <p className="text-gray-600 leading-relaxed">
-                    {renderText(rec.description)}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 flex justify-end">
-                <button className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium">
-                  Start Now
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // Props type for StoryCarousel
 interface StoryCarouselProps {
