@@ -1,3 +1,4 @@
+// src/pages/Diary.tsx
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase, DiaryEntry } from '../lib/supabase';
@@ -5,8 +6,10 @@ import { RichDiaryEditor, Memory } from "./RichDiaryEditor";
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, Edit, X } from 'lucide-react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+// Import the premium CSS styles
+import './Dairy.css';
 
 // --- INTERFACES & TYPES ---
 interface Notification {
@@ -25,7 +28,7 @@ const getToday = (): Date => {
 // --- INITIALIZE GEMINI MODEL ---
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY; 
 const genAI = new GoogleGenerativeAI(API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 // --- MAIN COMPONENT ---
 export function Diary() {
@@ -51,27 +54,30 @@ export function Diary() {
     return entryDate.getTime() === selectedDate.getTime();
   });
 
-  // Effect to load all entries from Supabase when the user is available
   useEffect(() => {
     if (user) {
       loadEntries();
     }
   }, [user]);
   
-  // Effect to handle loading content when the selected date changes
   useEffect(() => {
     const draftKey = getDraftKey();
-    if (selectedEntry) {
-      setDiaryHtml(selectedEntry.content);
-      setEditMode(false);
-      setMemoryQueue([]); // Clear queue for existing entry
-    } else if (draftKey) {
-      const savedDraft = localStorage.getItem(draftKey);
-      setDiaryHtml(savedDraft || "<p>What's on your mind today?</p>");
-      setEditMode(true);
-      setMemoryQueue([]); // Clear queue for new day
-    }
-  }, [selectedDate, getDraftKey, selectedEntry]);
+    
+    const timer = setTimeout(() => {
+        if (selectedEntry) {
+            setDiaryHtml(selectedEntry.content);
+            setEditMode(false);
+            setMemoryQueue([]);
+        } else {
+            const savedDraft = draftKey ? localStorage.getItem(draftKey) : null;
+            setDiaryHtml(savedDraft || "<p>What's on your mind today?</p>");
+            setEditMode(true);
+            setMemoryQueue([]);
+        }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [selectedDate, entries, user]);
 
   const loadEntries = async () => {
     if (!user) return;
@@ -172,7 +178,7 @@ export function Diary() {
       
       showNotification({ message: "Entry Saved & Analyzed!", type: "success" });
       setEditMode(false);
-      setMemoryQueue([]); // Clear the queue AFTER a successful save
+      setMemoryQueue([]);
       await loadEntries();
 
     } catch (error: any) {
@@ -199,53 +205,161 @@ export function Diary() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-zinc-900"></div>
+      <div className="premium-loading-container">
+        <div className="premium-loader">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-transparent"></div>
+          <div className="loading-pulse"></div>
+        </div>
+        <p className="loading-text">Loading your magical diary...</p>
+        <div className="loading-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-screen bg-white p-4 md:p-8">
+    <div className="diary-container">
+      {/* Floating Background Elements */}
+      <div className="floating-elements">
+        <div className="floating-circle floating-circle-1"></div>
+        <div className="floating-circle floating-circle-2"></div>
+        <div className="floating-circle floating-circle-3"></div>
+      </div>
+
+      {/* Premium Notification */}
       {notification && (
-        <div className={`fixed top-5 right-5 w-80 p-4 rounded-lg shadow-2xl text-white z-[100] ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
-          <p className="font-bold">{notification.message}</p>
-          {notification.description && <p className="text-sm">{notification.description}</p>}
+        <div className={`premium-notification ${notification.type === 'success' ? 'notification-success' : 'notification-error'}`}>
+          <div className="notification-content">
+            <div className="notification-icon">
+              {notification.type === 'success' ? '✨' : '⚠️'}
+            </div>
+            <div>
+              <p className="notification-title">{notification.message}</p>
+              {notification.description && (
+                <p className="notification-description">{notification.description}</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Enhanced Calendar Overlay */}
       {isCalendarOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setIsCalendarOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-lg shadow-2xl">
-            <DayPicker mode="single" selected={selectedDate} onSelect={handleDateSelect} disabled={{ after: getToday() }} initialFocus styles={{ caption: { color: '#4f46e5', fontWeight: 'bold' }, head: { color: '#4f4e5' } }} modifiersClassNames={{ selected: 'bg-indigo-600 text-white hover:bg-indigo-700', today: 'font-bold text-indigo-600' }}/>
+        <div className="calendar-overlay" onClick={() => setIsCalendarOpen(false)}>
+          <div className="calendar-container" onClick={(e) => e.stopPropagation()}>
+            <div className="calendar-header">
+              <h3>Choose Your Date</h3>
+              <button 
+                className="calendar-close"
+                onClick={() => setIsCalendarOpen(false)}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <DayPicker 
+              mode="single" 
+              selected={selectedDate} 
+              onSelect={handleDateSelect} 
+              disabled={{ after: getToday() }} 
+              initialFocus 
+              className="premium-calendar"
+            />
           </div>
         </div>
       )}
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white border border-zinc-200 rounded-lg shadow-lg">
-          <div className="p-6 flex justify-between items-center">
-            <h1 className="text-4xl font-serif text-zinc-800">Dear Diary...</h1>
-            <button onClick={() => setIsCalendarOpen(true)} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium bg-white border rounded-md hover:bg-zinc-100 text-zinc-700">
-              <CalendarIcon className="w-4 h-4 mr-2" />
-              <span>{format(selectedDate, 'PPP')}</span>
-            </button>
+
+      <div className="diary-content">
+        <div className="diary-card">
+          {/* Enhanced Header */}
+          <div className="diary-header">
+            <div className="header-content">
+              <h1 className="diary-title">
+                <div className="title-left">
+                  <span className="title-emoji">📖</span>
+                  Dear Diary...
+                  <span className="title-sparkle">✨</span>
+                </div>
+
+                <button 
+                  onClick={() => setIsCalendarOpen(true)} 
+                  className="date-selector"
+                >
+                  <CalendarIcon className="w-5 h-5" />
+                  <div className="date-text" style={{color:"black"}}>{format(selectedDate, 'PPP')}</div>
+                  <div className="date-indicator"></div>
+                </button>
+              </h1>
+            </div>
           </div>
-          <div className="p-6 pt-0">
+
+          {/* Enhanced Content Area */}
+          <div className="diary-body">
             {isFuture ? (
-              <div className="p-4 text-center text-red-100 bg-red-600 rounded-md">You cannot write about the future... yet!</div>
+              <div className="future-warning">
+                <div className="warning-icon">⏰</div>
+                <div className="warning-content">
+                  <h3>Time Travel Not Available!</h3>
+                  <p>You cannot write about the future... yet! ✨</p>
+                </div>
+                <div className="warning-decoration"></div>
+              </div>
             ) : (
-              <RichDiaryEditor content={diaryHtml} isEditable={editMode} onChange={handleContentChange} onSaveMemory={handleSaveMemory} showNotification={showNotification} />
+              <div className="editor-container">
+                <RichDiaryEditor 
+                  content={diaryHtml} 
+                  isEditable={editMode} 
+                  onChange={handleContentChange} 
+                  onSaveMemory={handleSaveMemory} 
+                  showNotification={showNotification} 
+                />
+              </div>
             )}
+
+            {/* Enhanced Action Buttons */}
             {!isFuture && (
-              <div className="pt-4 flex gap-2">
+              <div className="action-buttons">
                 {editMode ? (
                   <>
-                    <button onClick={handleSaveEntry} disabled={saving} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-md hover:bg-zinc-800 disabled:opacity-50">
-                      {saving ? "Analyzing & Saving..." : "Save Entry"}
+                    <button 
+                      onClick={handleSaveEntry} 
+                      disabled={saving} 
+                      className="btn-primary"
+                    >
+                      <span className="btn-icon">
+                        {saving ? '⚡' : '💾'}
+                      </span>
+                      <span className="btn-text">
+                        {saving ? "Analyzing & Saving..." : "Save Entry"}
+                      </span>
+                      <div className="btn-ripple"></div>
                     </button>
-                    {selectedEntry && (<button onClick={() => { setEditMode(false); setDiaryHtml(selectedEntry.content); }} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium bg-transparent border rounded-md hover:bg-zinc-100">Cancel</button>)}
+                    {selectedEntry && (
+                      <button 
+                        onClick={() => { 
+                          setEditMode(false); 
+                          setDiaryHtml(selectedEntry.content); 
+                        }} 
+                        className="btn-secondary"
+                      >
+                        <X className="w-4 h-4" />
+                        <span>Cancel</span>
+                      </button>
+                    )}
                   </>
                 ) : (
-                  selectedEntry && <button onClick={() => setEditMode(true)} className="inline-flex items-center justify-center h-10 px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-md hover:bg-zinc-800">Edit Entry</button>
+                  selectedEntry && (
+                    <button 
+                      onClick={() => setEditMode(true)} 
+                      className="btn-primary"
+                    >
+                      <Edit className="w-4 h-4" />
+                      <span>Edit Entry</span>
+                      <div className="btn-shine"></div>
+                    </button>
+                  )
                 )}
               </div>
             )}

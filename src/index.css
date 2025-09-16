@@ -2,27 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --- Custom Animations --- */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@layer utilities {
+  /* --- Custom Animations (Your originals + new one) --- */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  /* New animation for the diary notification popup */
+  @keyframes slide-in-from-right {
+    0% {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    100% {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  /* --- Animation Utility Classes --- */
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.6s ease-out forwards;
+  }
+
+  /* New utility class for the diary notification */
+  .animate-slide-in {
+    animation: slide-in-from-right 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
 }
 
-@keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
 
-.animate-fade-in {
-  animation: fadeIn 0.5s ease-out forwards;
-}
-
-.animate-slide-up {
-  animation: slideUp 0.6s ease-out forwards;
-}
-
-
-/* --- React Slick Custom Styling --- */
+/* --- React Slick Custom Styling (Unchanged) --- */
 
 /* Custom Arrow Styling */
 .custom-arrow {
@@ -87,16 +107,3 @@
   background-color: #4ade80; /* green-400 */
   transform: scale(1.25);
 }
-
-/* --- Tailwind CSS Aspect Ratio Plugin (if not installed) --- */
-/* If aspect ratio utilities like `aspect-w-16` don't work, install the plugin: */
-/* npm install -D @tailwindcss/aspect-ratio */
-/* And add it to your tailwind.config.js: */
-/*
-  module.exports = {
-    // ...
-    plugins: [
-      require('@tailwindcss/aspect-ratio'),
-    ],
-  }
-*/
