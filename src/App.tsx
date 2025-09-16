@@ -24,14 +24,14 @@ function App() {
 
   if (!user) {
     return <div>
-              <BackgroundAnimation />
+              <BackgroundAnimation circleColor={"#929191ff"}/>
               <Auth />
             </div>
   }
 
   return (
     <div>
-    <BackgroundAnimation />
+    <BackgroundAnimation circleColor={"#929191ff"}/>
     <Router>
       <Routes>
         <Route path="/" element={<Layout />}>
