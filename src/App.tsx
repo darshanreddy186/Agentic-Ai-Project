@@ -14,6 +14,7 @@ import { Profile } from './pages/Profile';
 import { EditAvatar } from './pages/EditAvatar';
 import { UserDetails } from './pages/UserDetails';
 import { supabase } from './lib/supabase';
+import { StoryDetail } from './pages/StoryDetails';
 
 function ProfileChecker({ user }: { user: any }) {
   // must be rendered inside Router to use useNavigate
@@ -76,6 +77,7 @@ function App() {
           <Route index element={<Home />} />
           <Route path="diary" element={<Diary />} />
           <Route path="relaxation" element={<Relaxation />} />
+          <Route path="/story/:storyId" element={<StoryDetail />} />
           <Route path="ai-chat" element={<AIChat />} />
           <Route path="profile" element={<Profile />} />
           <Route path="profile/edit-avatar" element={<EditAvatar />} />

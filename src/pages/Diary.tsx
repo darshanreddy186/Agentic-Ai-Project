@@ -159,12 +159,12 @@ export function Diary() {
         if (memoryError) showNotification({ message: "Entry saved, but failed to save memories", description: memoryError.message, type: "error" });
       }
 
-      const { data: summaryData } = await supabase.from('user_ai_summaries').select('diary_summary').eq('user_id', user.id).maybeSingle();
+      const { data: summaryData } = await supabase.from('user_ai_summaries').select('*').eq('user_id', user.id).maybeSingle();
       const oldSummary = summaryData?.diary_summary || "This is the user's first diary entry.";
       const summaryPrompt = `Update the previous summary by integrating the key feelings from the new entry. PREVIOUS SUMMARY: "${oldSummary}". NEW ENTRY: "${plainTextContent}". TASK: Respond with ONLY the updated summary text.`;
       const summaryResult = await model.generateContent(summaryPrompt);
       const updatedSummary = await summaryResult.response.text();
-      const recsPrompt = `Based on this user summary, provide exactly 5 short, actionable wellness recommendations. Format as a numbered list. SUMMARY: "${updatedSummary}"`;
+      const recsPrompt = `Based on this user summary, provide exactly 3 short, actionable wellness recommendations. Format as a numbered list. SUMMARY: "${updatedSummary},CHATING_SUMMARY : "${summaryData?.aichat_summary}" only respond with the list."`;
       const recsResult = await model.generateContent(recsPrompt);
       const recsText = await recsResult.response.text();
       const parsedRecommendations = recsText.split('\n').map(rec => rec.replace(/^\d+\.\s*/, '').trim()).filter(rec => rec.length > 5);
