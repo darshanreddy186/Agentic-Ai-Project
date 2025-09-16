@@ -95,7 +95,7 @@ export function Home() {
         </div>
 
         {/* --- YOUR CHAT BAR - NOW FULLY FUNCTIONAL --- */}
-        <footer className="fixed bottom-0 left-0 right-0 p-4 z-50">
+        <footer className="fixed bottom-0 left-0 right-0 p-4 bg-gray-50 bg-opacity-80 backdrop-blur-sm z-50">
           <form onSubmit={handleChatSubmit} className="flex items-center gap-2 bg-white text-gray-800 p-2 rounded-full shadow-2xl max-w-2xl mx-auto border border-gray-200">
             <span className="pl-3 text-gray-400">+</span>
             <input
