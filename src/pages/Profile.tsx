@@ -1,6 +1,6 @@
 // src/pages/Profile.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Edit2, Loader2, Save, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { MemoriesSlideshow } from '../components/MemoriesSlideshow';
@@ -75,6 +75,7 @@ const ProfileField = ({ label, value }: { label: string, value: string | null | 
 );
 
 export function Profile() {
+    const location = useLocation();
     const { user } = useAuth();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loadingProfile, setLoadingProfile] = useState(true);
@@ -85,6 +86,7 @@ export function Profile() {
     const [showMemories, setShowMemories] = useState(false);
     const [loadingMemories, setLoadingMemories] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showSuccess, setShowSuccess] = useState(false);
 
     const calculateKnowledgePercentage = useCallback(() => {
         if (!profile) return 0;
@@ -121,6 +123,13 @@ export function Profile() {
     useEffect(() => {
         fetchProfile();
     }, [fetchProfile]);
+
+    useEffect(() => {
+        if (location.state?.avatarSaved) {
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 1500);
+        }
+    }, [location.state]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -314,6 +323,11 @@ export function Profile() {
                     memories={memories}
                     onClose={() => setShowMemories(false)}
                 />
+            )}
+            {showSuccess && (
+                <div className="fixed top-8 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50">
+                    Avatar saved successfully!
+                </div>
             )}
         </div>
     );

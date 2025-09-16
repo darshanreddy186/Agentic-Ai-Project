@@ -15,29 +15,33 @@ import {
   User, // Generic user icon for the dropdown trigger
   UserCircle // Icon for the "Profile" link inside the dropdown
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';// Adjust path if needed
 
 export function Layout() {
   const { user, signOut } = useAuth();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false); // State for the new profile dropdown
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
-  const profileMenuRef = useRef<HTMLDivElement>(null); // Ref for the dropdown to handle outside clicks
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null); // <-- Add this
 
-  // This effect will close the dropdown if you click outside of it
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
-        setIsProfileMenuOpen(false);
+    const fetchAvatar = async () => {
+      if (!user) return;
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('avatar')
+        .eq('id', user.id)
+        .single();
+      if (error) {
+        console.error('Supabase error:', error.message);
       }
-    }
-    // Bind the event listener
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      // Unbind the event listener on clean up
-      document.removeEventListener("mousedown", handleClickOutside);
+      if (data?.avatar) {
+        setAvatarUrl(data.avatar);
+      }
     };
-  }, [profileMenuRef]);
+    fetchAvatar();
+  }, [user, location.pathname]); // <-- add location.pathname
 
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
@@ -51,11 +55,13 @@ export function Layout() {
     await signOut();
   };
 
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-gray-50 to-green-50">
       <nav className="bg-white/80 backdrop-blur-lg shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
+          <div className="flex justify-between h-16"> {/* was h-16 */}
             {/* Logo */}
             <div className="flex items-center">
               <Link to="/" className="flex items-center space-x-2">
@@ -95,9 +101,13 @@ export function Layout() {
               <div className="relative" ref={profileMenuRef}>
                 <button
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                  className="w-10 h-10 flex items-center justify-center bg-gradient-to-br from-blue-500 to-green-500 rounded-full text-white shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="w-12 h-12 flex items-center justify-center bg-gradient-to-br from-blue-500 to-green-500 rounded-full text-white shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
-                  <User className="w-5 h-5" />
+                  <img
+                    src={avatarUrl || 'https://i.pravatar.cc/300'}
+                    alt="Profile Avatar"
+                    className="w-12 h-12 rounded-full object-cover"
+                  />
                 </button>
 
                 {isProfileMenuOpen && (
