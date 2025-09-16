@@ -80,6 +80,10 @@ export function PersonalizedRecommendations() {
         - Each recommendation MUST follow the format: **Title**: Description.
         - The title MUST be bolded with double asterisks.
         - The description should be a single, encouraging sentence.
+        - Dont use the existing recommendations.
+        - Focus on mental wellness, emotional health, or personal growth.
+        - Avoid generic advice; make it specific and actionable.
+        - Ensure the tone is positive, supportive, and empowering.
       `;
 
       // 3. Call the Gemini API to get new recommendations.
