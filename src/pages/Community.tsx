@@ -29,7 +29,7 @@ interface ModerationResult {
 async function moderateContent(contentToModerate: string, postContext: string | null = null): Promise<ModerationResult> {
     if (!GEMINI_API_KEY) return { category: 'safe', reason: 'API Key not configured.', analysis: {} };
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
     const system_prompt = `You are a sophisticated AI safety moderator for a mental health support community. Your job is to analyze user-submitted text for safety and intent, often with the context of an original post.
 
     Categories & Rules:
@@ -70,7 +70,7 @@ async function moderateContent(contentToModerate: string, postContext: string | 
  */
 async function generateSupportiveMessage(content: string): Promise<string> {
     if (!GEMINI_API_KEY) return "It sounds like you're going through a lot. Please remember to be kind to yourself.";
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
     const prompt = `A user wrote: "${content}". Write a short, gentle, and empathetic message (1-2 sentences) acknowledging their feelings. Do not give advice. Start with "It sounds like you're going through a lot right now."`;
     try {
         const result = await model.generateContent(prompt);
@@ -123,7 +123,7 @@ export function Community() {
         try {
             const { data, error } = await supabase.from('comments').select('*').eq('post_id', postId).order('created_at', { ascending: true });
             if (error) throw error;
-            const commentMap = new Map(data.map(c => [c.id, { ...c, replies: [] }]));
+            const commentMap = new Map((data || []).map(c => [c.id, { ...c, replies: [] }]));
             const threadedComments: Comment[] = [];
             for (const comment of commentMap.values()) {
                 if (comment.parent_comment_id && commentMap.has(comment.parent_comment_id)) {
@@ -133,8 +133,12 @@ export function Community() {
                 }
             }
             setComments(threadedComments);
+            // FIX: Return the raw data for accurate counting
+            return data || [];
         } catch (error) { 
-            console.error('Error loading comments:', error); 
+            console.error('Error loading comments:', error);
+            // FIX: Return empty array on error
+            return [];
         }
     }, []);
 
@@ -179,33 +183,46 @@ export function Community() {
     const proceedWithPosting = async (ai_analysis: object) => {
         if (!commentFormData.content.trim() || !selectedPost) return;
         setIsSubmitting(true);
-        if(!user){
-            toast.error("You must be logged in to post a response.");
-            setIsSubmitting(false);
-            return;
-        }
-
+    
         try {
-            const {error } = await supabase.from('comments').insert([{ post_id: selectedPost.id, content: commentFormData.content, author_name: commentFormData.author_name || 'Anonymous', user_id: user.id, parent_comment_id: replyTo?.id, ai_analysis }]).select().single();
-            if (error) throw error;
+            if (!user) throw new Error("You must be logged in to post a response.");
             
-            loadComments(selectedPost.id);
-            if (!replyTo) {
-                const newCount = (selectedPost.comment_count || 0) + 1;
-                setSelectedPost({ ...selectedPost, comment_count: newCount });
-                setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, comment_count: newCount } : p));
-                await supabase.from('posts').update({ comment_count: newCount }).eq('id', selectedPost.id);
-            }
-
+            // Insert the new comment
+            const { error } = await supabase.from('comments').insert([{
+                post_id: selectedPost.id,
+                content: commentFormData.content,
+                author_name: commentFormData.author_name || 'Anonymous',
+                user_id: user.id,
+                parent_comment_id: replyTo?.id,
+                ai_analysis
+            }]).select().single();
+    
+            if (error) throw error;
+    
+            // --- FIX: Recalculate comment count accurately after posting ---
+            // 1. Reload all comments for the post and get the raw data
+            const allComments = await loadComments(selectedPost.id);
+            const newCount = allComments.length;
+    
+            // 2. Update the count in the Supabase 'posts' table
+            await supabase.from('posts').update({ comment_count: newCount }).eq('id', selectedPost.id);
+    
+            // 3. Update the local state for both the detailed view and the main list view
+            setSelectedPost(currentPost => currentPost ? { ...currentPost, comment_count: newCount } : null);
+            setPosts(currentPosts => currentPosts.map(p =>
+                p.id === selectedPost.id ? { ...p, comment_count: newCount } : p
+            ));
+            // --- End of FIX ---
+    
             toast.success("Your response was posted.", {
                 description: "Thank you for contributing to the community."
             });
             setCommentFormData({ content: '', author_name: '' });
             setReplyTo(null);
-        } catch (error) { 
-            toast.error("Could not save your response."); 
-        } finally { 
-            setIsSubmitting(false); 
+        } catch (error) {
+            toast.error("Could not save your response.");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -277,7 +294,8 @@ export function Community() {
         const date = new Date(dateString);
         const now = new Date();
         const diffMs = now.getTime() - date.getTime();
-        const diffSec = Math.floor(diffMs / 1000);
+        // FIX: Prevent negative seconds due to clock skew between client and server
+        const diffSec = Math.max(0, Math.floor(diffMs / 1000));
         const diffMin = Math.floor(diffSec / 60);
         const diffHour = Math.floor(diffMin / 60);
 
@@ -326,7 +344,7 @@ export function Community() {
                             <div className="flex items-start gap-4 mb-4">
                                 <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm">
                                     <span className="text-xl text-white font-bold">
-                                        {selectedPost.author_name ? selectedPost.author_name.toUpperCase() : 'A'}
+                                        {selectedPost.author_name ? selectedPost.author_name[0].toUpperCase() : 'A'}
                                     </span>
                                 </div>
                                 <div className="flex-grow">
@@ -373,7 +391,7 @@ export function Community() {
                         </div>
 
                         {/* Enhanced Community Responses Section */}
-                        <div className="space-y-6 " style={{ marginBottom: '80px' }}>
+                        <div className="space-y-6 " style={{ marginBottom: '150px' }}>
                             <div className="flex items-center gap-3">
                                 <h2 className="text-2xl font-bold text-gray-800">Community Responses</h2>
                                 <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
@@ -405,7 +423,7 @@ export function Community() {
 
                         {/* Enhanced Comment Input Form */}
                         <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 w-full max-w-4xl px-4 z-20">
-                            <div className="bg-white/95 backdrop-blur-md p-4 rounded-2xl shadow-xl border border-white/50" style={{ backgroundColor: "#f0fefdff" }}>
+                            <div className="bg-white/95 backdrop-blur-md p-4 rounded-2xl shadow-xl border border-white/50">
                                 {replyTo && (
                                     <div className="flex justify-between items-center text-sm text-gray-600 mb-3 p-2 bg-purple-50 rounded-lg">
                                         <span className="flex items-center gap-2">
@@ -645,7 +663,7 @@ export function Community() {
                                             <div className="flex items-start gap-4 mb-4">
                                                 <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-110 transition-transform">
                                                     <span className="text-xl text-white font-bold">
-                                                        {post.author_name ? post.author_name.toUpperCase() : 'A'}
+                                                        {post.author_name ? post.author_name[0].toUpperCase() : 'A'}
                                                     </span>
                                                 </div>
                                                 <div className="flex-grow">
@@ -777,14 +795,16 @@ const CommentComponent = ({
 }) => {
     const isAuthor = comment.user_id === postAuthorId;
     const isYou = comment.user_id === user?.id;
-    const canReply = user; // Allow any logged-in user to reply
+    // --- THIS IS THE FIX ---
+    // Allow any logged-in user to reply to any comment.
+    const canReply = user;
 
     return (
         <div className="flex gap-4">
             {/* Enhanced Avatar */}
             <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm">
                 <span className="text-base text-white font-bold">
-                    {comment.author_name ? comment.author_name.toUpperCase() : 'A'}
+                    {comment.author_name ? comment.author_name[0].toUpperCase() : 'A'}
                 </span>
             </div>
             

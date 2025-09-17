@@ -16,7 +16,7 @@ We are following an **agile approach** with iterations, backlog management, and 
 ## 💡 Project Discussions  
 
 - **Excalidraw (Idea Brainstorming & Flow)**  
-[🔗 Open Excalidraw Board](<https://excalidraw.com/#json=gMcx7lz2UajxxqCXSBlzs,vcEAt7K4ae8_E4zeVitOhw>)  
+[🔗 Open Excalidraw Board](<https://excalidraw.com/#json=v75V7SXpA2v5WhvdtGRFA,d_Tl5KfITopOM5ufsylUkA>)  
 
 ---
 
