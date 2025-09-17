@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Heart, Mail, Lock } from 'lucide-react';
-import { TermsModal } from '../components/TermsModal'; // Import the new modal component
+import { TermsModal } from '../components/TermsModal';
+import './Auth.css'; // This now imports the updated styles
 
 export function Auth() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -9,7 +10,6 @@ export function Auth() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
-  // --- New State Variables ---
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   
@@ -22,7 +22,6 @@ export function Auth() {
     e.preventDefault();
     setError('');
     
-    // --- New Validation for Terms and Conditions ---
     if (isSignUp && !agreedToTerms) {
       setError('You must agree to the Terms and Conditions to create an account.');
       return;
@@ -41,7 +40,6 @@ export function Auth() {
           return;
         }
         await signUp(email, password);
-        // Change state to sign-in and show success message
         setIsSignUp(false);
         setEmail('');
         setPassword('');
@@ -66,8 +64,24 @@ export function Auth() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 animated-gradient">
+        {/* --- Bubble Container --- */}
+        <div className="bubbles">
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+          <div className="bubble"></div>
+        </div>
+
+        <div className="max-w-md w-full space-y-8 relative z-10">
           <div className="text-center">
             <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-500 to-green-500 rounded-full flex items-center justify-center mb-4">
               <Heart className="w-8 h-8 text-white" />
@@ -158,8 +172,7 @@ export function Auth() {
                       />
                     </div>
                   </div>
-
-                  {/* --- New Terms and Conditions Checkbox --- */}
+                  
                   <div className="flex items-start">
                     <div className="flex items-center h-5">
                       <input
@@ -203,7 +216,7 @@ export function Auth() {
                   type="button"
                   onClick={() => {
                     setIsSignUp(!isSignUp);
-                    setError(''); // Clear error on toggle
+                    setError('');
                   }}
                   className="font-medium text-blue-600 hover:text-blue-500"
                 >
@@ -215,7 +228,6 @@ export function Auth() {
         </div>
       </div>
       
-      {/* --- Render the Modal --- */}
       <TermsModal isOpen={showTermsModal} onClose={() => setShowTermsModal(false)} />
     </>
   );
