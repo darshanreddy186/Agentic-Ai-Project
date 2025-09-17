@@ -335,7 +335,7 @@ export function Relaxation(): JSX.Element {
 
       <div className="relative max-w-7xl mx-auto px-4 py-8 space-y-12">
         {/* Enhanced Header */}
-        <header className="text-center py-8">
+        <header className="bg-gradient-to-br text-center py-8"style={{backgroundColor:"#d3ebebff",borderRadius:"20px",boxShadow:"0 4px 12px rgba(0, 0, 0, 0.1)"}}>
           <div className="inline-flex items-center gap-3 mb-4">
             <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl shadow-lg">
               <Sparkles className="w-8 h-8 text-white" />
@@ -640,7 +640,7 @@ export function Relaxation(): JSX.Element {
                 </div>
               )}
 
-              <div className="bg-gradient-to-br from-amber-50 to-orange-100 rounded-2xl p-6 shadow-xl border border-amber-200">
+              <div className="bg-gradient-to-br from-amber-50  rounded-2xl p-6 shadow-xl border border-amber-200"  style={{backgroundColor:"#d3ebebff !important"}} >
                 <div className="flex items-center gap-4 mb-6">
                   <div className="p-3 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-lg">
                     <Sun className="w-6 h-6 text-white" />

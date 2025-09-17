@@ -373,7 +373,7 @@ export function Community() {
                         </div>
 
                         {/* Enhanced Community Responses Section */}
-                        <div className="space-y-6">
+                        <div className="space-y-6 " style={{ marginBottom: '80px' }}>
                             <div className="flex items-center gap-3">
                                 <h2 className="text-2xl font-bold text-gray-800">Community Responses</h2>
                                 <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
@@ -405,7 +405,7 @@ export function Community() {
 
                         {/* Enhanced Comment Input Form */}
                         <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 w-full max-w-4xl px-4 z-20">
-                            <div className="bg-white/95 backdrop-blur-md p-4 rounded-2xl shadow-xl border border-white/50">
+                            <div className="bg-white/95 backdrop-blur-md p-4 rounded-2xl shadow-xl border border-white/50" style={{ backgroundColor: "#f0fefdff" }}>
                                 {replyTo && (
                                     <div className="flex justify-between items-center text-sm text-gray-600 mb-3 p-2 bg-purple-50 rounded-lg">
                                         <span className="flex items-center gap-2">
@@ -427,7 +427,7 @@ export function Community() {
                                         value={commentFormData.content} 
                                         onChange={(e) => setCommentFormData({...commentFormData, content: e.target.value})} 
                                         placeholder="Share your thoughts and support..." 
-                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 rounded-xl transition-all resize-none" 
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 rounded-xl transition-all resize-none"
                                     />
                                     
                                     <div className='flex gap-3'>

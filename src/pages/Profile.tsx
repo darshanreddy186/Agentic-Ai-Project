@@ -175,7 +175,7 @@ export function Profile() {
         try {
             const { data, error: fetchError } = await supabase
                 .from('memories')
-                .select('id, image_url, context, mood')
+                .select('id, image_url, context, mood,created_at')
                 .eq('user_id', user.id);
 
             if (fetchError) throw fetchError;

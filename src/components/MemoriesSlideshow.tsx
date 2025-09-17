@@ -36,11 +36,18 @@ interface Memory {
     image_url: string;
     context: string;
     mood: string;
+    created_at?: string;
 }
 
 interface MemoriesSlideshowProps {
     memories: Memory[];
     onClose: () => void;
+}
+
+function formatDate(dateString?: string) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleString(); // You can customize this format
 }
 
 export function MemoriesSlideshow({ memories, onClose }: MemoriesSlideshowProps) {
@@ -67,6 +74,7 @@ export function MemoriesSlideshow({ memories, onClose }: MemoriesSlideshowProps)
             const results = await Promise.all(promises);
             // Filter out the null results (broken images) and update the state
             setValidMemories(results.filter((memory): memory is Memory => memory !== null));
+            console.log("Valid Memories:", results.filter((memory): memory is Memory => memory !== null));
             setIsLoading(false);
         };
 
@@ -116,6 +124,11 @@ export function MemoriesSlideshow({ memories, onClose }: MemoriesSlideshowProps)
                                         />
                                     </div>
                                     <div className="p-6 bg-gray-900 bg-opacity-50">
+                                       {memory.created_at && (
+                                        <p className="text-sm text-gray-400 mb-2 text-right">
+                                       {formatDate(memory.created_at)}
+                                         </p>
+)}
                                         <p className="text-xl text-white font-medium leading-relaxed">{memory.context}</p>
                                     </div>
                                 </div>

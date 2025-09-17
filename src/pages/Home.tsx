@@ -6,6 +6,7 @@ import {
     MapPin, Phone, Mail, Twitter, Facebook, Instagram, Play, Pause,TrendingUp, RotateCcw, LoaderCircle,Sparkles, Send 
 } from 'lucide-react';
 import { PersonalizedRecommendations } from '../components/PersonalizedRecommendations.tsx'; // Make sure this path is correct
+import { useAuth } from '../hooks/useAuth';
 
 // --- Type Definitions ---
 interface Story {
@@ -34,6 +35,7 @@ const formatTime = (seconds: number): string => {
 // --- Child Components ---
 
 function StoryCarousel() {
+  const { user } = useAuth();
   const [stories, setStories] = useState<Story[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +170,22 @@ function DailyMotivationPlayer() {
 
 // --- Main Home Component ---
 export function Home() {
+  const { user } = useAuth();
+  const [displayName, setDisplayName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user) return;
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('display_name, username')
+        .eq('id', user.id)
+        .single();
+      if (data) setDisplayName(data.display_name || data.username || null);
+    };
+    fetchProfile();
+  }, [user]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100 relative overflow-x-hidden">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -180,8 +198,10 @@ export function Home() {
               <div className="absolute inset-0 opacity-10"><div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent animate-pulse"></div></div>
               <div className="relative z-10 flex flex-col lg:flex-row justify-between items-center">
                 <div className="mb-6 lg:mb-0">
-                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">Welcome back! ✨</h1>
-                  <p className="text-xl sm:text-2xl opacity-90 font-light max-w-2xl">Ready to continue your wellness journey and unlock your potential today?</p>
+<h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">
+  Welcome back{displayName ? `, ${displayName}` : ''}! ✨
+</h1>
+                  <p className="text-xl sm:text-1xl opacity-90 font-light max-w-2xl">Ready to continue your wellness journey and unlock your potential today?</p>
                   <div className="mt-6 flex flex-wrap gap-4">
                     <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full"><div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div><span className="text-sm font-medium">12 days streak</span></div>
                     <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full"><TrendingUp className="w-4 h-4" /><span className="text-sm font-medium">Progress: +25%</span></div>
