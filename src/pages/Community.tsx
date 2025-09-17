@@ -276,11 +276,15 @@ export function Community() {
     const getTimeAgo = (dateString: string) => {
         const date = new Date(dateString);
         const now = new Date();
-        const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-        
-        if (diffInHours < 1) return 'Just now';
-        if (diffInHours < 24) return `${diffInHours}h ago`;
-        if (diffInHours < 48) return 'Yesterday';
+        const diffMs = now.getTime() - date.getTime();
+        const diffSec = Math.floor(diffMs / 1000);
+        const diffMin = Math.floor(diffSec / 60);
+        const diffHour = Math.floor(diffMin / 60);
+
+        if (diffSec < 60) return `${diffSec}s ago`;
+        if (diffMin < 60) return `${diffMin}m ago`;
+        if (diffHour < 24) return `${diffHour}h ago`;
+        if (diffHour < 48) return 'Yesterday';
         return date.toLocaleDateString();
     };
 
