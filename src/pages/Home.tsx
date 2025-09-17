@@ -6,6 +6,7 @@ import {
     MapPin, Phone, Mail, Twitter, Facebook, Instagram, Play, Pause,TrendingUp, RotateCcw, LoaderCircle,Sparkles, Send 
 } from 'lucide-react';
 import { PersonalizedRecommendations } from '../components/PersonalizedRecommendations.tsx'; // Make sure this path is correct
+import { MemoriesSlideshow } from '../components/MemoriesSlideshow';
 import { useAuth } from '../hooks/useAuth';
 
 // --- Type Definitions ---
@@ -21,6 +22,14 @@ interface DailyMotivation {
   quote: string;
   audiolink: string;
   imagelink: string;
+  created_at: string;
+}
+
+interface Memory {
+  id: string;
+  image_url: string;
+  context: string;
+  mood: string;
   created_at: string;
 }
 
@@ -172,6 +181,10 @@ function DailyMotivationPlayer() {
 export function Home() {
   const { user } = useAuth();
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [showMemories, setShowMemories] = useState(false);
+  const [loadingMemories, setLoadingMemories] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -185,6 +198,39 @@ export function Home() {
     };
     fetchProfile();
   }, [user]);
+
+  const handleShowMemories = async () => {
+    if (!user) {
+      setError("You must be logged in to see memories.");
+      return;
+    }
+
+    setLoadingMemories(true);
+    setError(null);
+
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('memories')
+        .select('id, image_url, context, mood, created_at')
+        .eq('user_id', user.id);
+
+      if (fetchError) throw fetchError;
+
+      if (data) {
+        if (data.length === 0) {
+          setError("You haven't saved any memories yet.");
+        } else {
+          setMemories(data);
+          setShowMemories(true);
+        }
+      }
+    } catch (err: any) {
+      setError("Could not fetch memories. Please try again later.");
+      console.error('Error fetching memories:', err.message);
+    } finally {
+      setLoadingMemories(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100 relative overflow-x-hidden">
@@ -221,6 +267,17 @@ export function Home() {
                         <div className="space-y-4">
                             <Link to="/diary" className="flex items-center gap-4 p-4 rounded-xl hover:bg-blue-50 border border-gray-100 hover:shadow-lg transition-all"><div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg text-white"><BookOpen className="w-5 h-5" /></div><div><span className="font-medium text-gray-900">Write in Diary</span></div></Link>
                             <Link to="/community" className="flex items-center gap-4 p-4 rounded-xl hover:bg-green-50 border border-gray-100 hover:shadow-lg transition-all"><div className="p-2 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg text-white"><Users className="w-5 h-5" /></div><div><span className="font-medium text-gray-900">Community Support</span></div></Link>
+                            <button
+  onClick={handleShowMemories}
+  className="flex items-center gap-4 p-4 rounded-xl hover:bg-green-50 border border-gray-100 hover:shadow-lg transition-all w-full"
+>
+  <div className="p-2 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg text-white">
+    <Users className="w-5 h-5" />
+  </div>
+  <div>
+    <span className="font-medium text-gray-900">Memories</span>
+  </div>
+</button>             
                         </div>
                     </div>
                     <StoryCarousel />
@@ -229,6 +286,13 @@ export function Home() {
         </div>
       </main>
       <Footer />
+      {showMemories && (
+  <MemoriesSlideshow
+    memories={memories}
+    onClose={() => setShowMemories(false)}
+  />
+)}
+{error && <p className="text-red-500 text-sm mt-2">{error}</p>}
     </div>
   );
 }
