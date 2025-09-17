@@ -68,7 +68,7 @@ export function PersonalizedRecommendations() {
 
       // 2. Initialize Gemini AI client and construct the prompt.
       const genAI = new GoogleGenerativeAI(API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
       
       const prompt = `
         Based on the user's latest diary and chat summaries, generate exactly 3 short, actionable wellness recommendations.

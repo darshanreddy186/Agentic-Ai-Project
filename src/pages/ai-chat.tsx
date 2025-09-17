@@ -1,7 +1,7 @@
 // src/pages/ai-chat.tsx
 
 import { useState, useRef, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Send, Loader, Mic, MicOff, Volume2 } from 'lucide-react';
 import { GoogleGenerativeAI, Content } from '@google/generative-ai';
 import { supabase } from '../lib/supabase';
@@ -216,8 +216,8 @@ export function AIChat() {
   const [initialLoading, setInitialLoading] = useState(true);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const location = useLocation();
-  const navigate = useNavigate();
+  // const location = useLocation();
+  // const navigate = useNavigate();
   const { user } = useAuth();
   
   // Speech recognition
@@ -277,7 +277,7 @@ export function AIChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isAwaitingResponse]);
 
-  // Main function to get AI response with retry logic
+    // Main function to get AI response with retry logic
   const getAIResponse = async (currentMessages: Message[]) => {
     setIsAwaitingResponse(true);
     const maxRetries = 3;
@@ -296,18 +296,30 @@ export function AIChat() {
         let history = geminiFormattedMessages;
         if (history.length > 0 && history[0].role !== 'user') history = [];
 
+        // --- STEP 1: Get the immediate chat response ---
         const chat = model.startChat({ history });
         const result = await chat.sendMessage(latestMessage.parts);
         const text = (await result.response.text()).trim();
 
+        // --- STEP 2: Save and display the response immediately ---
         if (user) {
+          // Await this to ensure the message is saved before we proceed
           await supabase.from('chat_messages').insert({ user_id: user.id, role: 'model', content: text });
         }
         
-        setMessages(prev => [...prev, { text, sender: 'ai' as const }]);
-        await updateSummaryAndRecommendations([...currentMessages, { text, sender: 'ai' as const }]);
+        const finalConversation = [...currentMessages, { text, sender: 'ai' as const }];
+        setMessages(finalConversation);
+        
+        // --- STEP 3: Stop the loading indicator for the user ---
+        // The user now has their response. The "AI is thinking" message can disappear.
         setIsAwaitingResponse(false);
-        return;
+
+        // --- STEP 4: Trigger the background task WITHOUT waiting for it ---
+        // By removing 'await', this function runs in the background.
+        // The getAIResponse function will finish and return immediately.
+        updateSummaryAndRecommendations(finalConversation); 
+        
+        return; // Exit the function and retry loop on success.
 
       } catch (error: any) {
         if (error.message && error.message.includes('503')) {
@@ -325,32 +337,52 @@ export function AIChat() {
         }
       }
     }
+    // Failsafe in case of loop exit
     setIsAwaitingResponse(false);
   };
 
+    // This function now runs silently in the background
   const updateSummaryAndRecommendations = async (fullConversation: Message[]) => {
+    // We still check for user and conversation length
     if (!user || fullConversation.length < 4) return;
+
     try {
       const conversationText = fullConversation.map(m => `${m.sender}: ${m.text}`).join('\n');
-      const { data: summaryData } = await supabase.from('user_ai_summaries').select('aichat_summary').eq('user_id', user.id).maybeSingle();
+      const { data: summaryData } = await supabase.from('user_ai_summaries').select('*').eq('user_id', user.id).maybeSingle();
+      
+      // --- You can still use the optimized single-prompt approach here ---
+      // This is efficient for the background task without slowing the user down.
       const oldSummary = summaryData?.aichat_summary || "This is the user's first conversation.";
-      const summaryPrompt = `Update the user's wellness summary by integrating key points from the latest conversation. PREVIOUS SUMMARY: "${oldSummary}". LATEST CONVERSATION: "${conversationText}". TASK: Respond with ONLY the updated summary text.`;
-      const summaryResult = await model.generateContent(summaryPrompt);
-      const updatedSummary = (await summaryResult.response.text()).trim();
+      const diarySummary = summaryData?.diary_summary || 'No recent diary summary.';
+
+      const combinedPrompt = `
+        You have two tasks. First, update the chat summary based on the latest conversation. Second, using that new summary and the diary summary, generate 3 wellness recommendations.
+
+        PREVIOUS CHAT SUMMARY: "${oldSummary}"
+        LATEST CONVERSATION: "${conversationText}"
+        DIARY SUMMARY: "${diarySummary}"
+
+        Respond with the updated summary, followed by a "###---###" separator, and then the recommendations in the format **Title**: Description.
+      `;
+      const result = await model.generateContent(combinedPrompt);
+      const responseText = await result.response.text();
       
-      const recsPrompt = `Based on this summary, provide exactly 5 short, actionable wellness recommendations. Do NOT include any introductory phrases like "Here are..." or "Sure, here are...". Begin the first recommendation directly. SUMMARY: "${updatedSummary}"`;
-      const recsResult = await model.generateContent(recsPrompt);
-      const recsText = await recsResult.response.text();
+      const [updatedSummary, recsText] = responseText.split('###---###');
       
-      const parsedRecommendations = recsText.split('\n')
+      const parsedRecommendations = recsText.trim().split('\n')
         .map(rec => rec.replace(/^\d+\.\s*/, '').trim())
         .filter(rec => rec.length > 5 && !rec.toLowerCase().startsWith("here are"));
 
       await supabase.from('user_ai_summaries').upsert({
-        user_id: user.id, aichat_summary: updatedSummary, recommendations: parsedRecommendations.slice(0, 5), updated_at: new Date().toISOString()
+        user_id: user.id, 
+        aichat_summary: updatedSummary.trim(), 
+        recommendations: parsedRecommendations.slice(0, 3), 
+        updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' });
+
     } catch (error) {
-      console.error("Failed to update AI summary:", error);
+      // If this background task fails, we just log it. We don't show an error to the user.
+      console.error("Silent background task to update AI summary failed:", error);
     }
   };
 

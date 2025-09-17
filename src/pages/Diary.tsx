@@ -158,17 +158,56 @@ export function Diary() {
         const { error: memoryError } = await supabase.from('memories').insert(memoriesToInsert);
         if (memoryError) showNotification({ message: "Entry saved, but failed to save memories", description: memoryError.message, type: "error" });
       }
-
       const { data: summaryData } = await supabase.from('user_ai_summaries').select('*').eq('user_id', user.id).maybeSingle();
       const oldSummary = summaryData?.diary_summary || "This is the user's first diary entry.";
-      const summaryPrompt = `Update the previous summary by integrating the key feelings from the new entry. PREVIOUS SUMMARY: "${oldSummary}". NEW ENTRY: "${plainTextContent}". TASK: Respond with ONLY the updated summary text.`;
-      const summaryResult = await model.generateContent(summaryPrompt);
-      const updatedSummary = await summaryResult.response.text();
-      const recsPrompt = `Based on this user summary, provide exactly 3 short, actionable wellness recommendations. Format as a numbered list. SUMMARY: "${updatedSummary},CHATING_SUMMARY : "${summaryData?.aichat_summary}" only respond with the list."`;
-      const recsResult = await model.generateContent(recsPrompt);
-      const recsText = await recsResult.response.text();
-      const parsedRecommendations = recsText.split('\n').map(rec => rec.replace(/^\d+\.\s*/, '').trim()).filter(rec => rec.length > 5);
-      const { error: upsertError } = await supabase.from('user_ai_summaries').upsert({ user_id: user.id, diary_summary: updatedSummary.trim(), recommendations: parsedRecommendations.slice(0, 5), updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+      const aichatSummary = summaryData?.aichat_summary || 'No recent chat summary.';
+
+      // This enhanced prompt gives the model a clearer role and more specific instructions for the recommendations.
+      const combinedPrompt = `
+        You are a helpful wellness assistant. Your goal is to provide insightful and personalized support.
+
+        You have two tasks to perform in sequence:
+        1.  **Generate an Updated Diary Summary**: Read the PREVIOUS SUMMARY and the NEW DIARY ENTRY. Integrate the key feelings and events from the new entry to create an updated, concise summary.
+        2.  **Generate Wellness Recommendations**: Using the new summary you just created and the provided CHAT SUMMARY, generate exactly 3 short, actionable wellness recommendations.
+
+        ---
+        CONTEXT:
+        PREVIOUS DIARY SUMMARY: "${oldSummary}"
+        NEW DIARY ENTRY: "${plainTextContent}"
+        CHAT SUMMARY: "${aichatSummary}"
+        ---
+
+        RECOMMENDATION INSTRUCTIONS:
+        - **Directly Relevant**: Each recommendation must be directly inspired by the themes in the updated diary and chat summaries.
+        - **Specific & Actionable**: Avoid generic advice like "be mindful." Instead, suggest a concrete action. For example, if the user feels overwhelmed, a good recommendation would be "**Single-Task Focus**: Choose one small task for the next hour and give it your full attention, ignoring everything else."
+        - **Formatting**: Each recommendation MUST follow the format: **Title**: Description. The title must be bolded.
+        - **Tone**: Ensure the tone is positive, supportive, and empowering.
+        - **Do not use past recommendations.**
+
+        ---
+        RESPONSE FORMAT:
+        First, provide ONLY the updated summary text.
+        Then, on a new line, add the separator "###---###".
+        Finally, on new lines, add the 3 recommendations, each on its own line.
+      `;
+
+      const combinedResult = await model.generateContent(combinedPrompt);
+      const combinedResponse = await combinedResult.response.text();
+
+      // The parsing logic remains the same, as the output format is controlled.
+      const responseParts = combinedResponse.split('###---###');
+      const updatedSummary = responseParts[0] || '';
+      const recommendationsText = responseParts[1] || '';
+      
+      const parsedRecommendations = recommendationsText.trim().split('\n').map(rec => rec.replace(/^\d+\.\s*/, '').trim()).filter(rec => rec.length > 5);
+
+      const { error: upsertError } = await supabase.from('user_ai_summaries').upsert({
+        user_id: user.id,
+        diary_summary: updatedSummary.trim(),
+        recommendations: parsedRecommendations.slice(0, 3), // Ensure we only take 3
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' });
+
       if (upsertError) throw new Error(`Could not update AI data: ${upsertError.message}`);
       
       const draftKey = getDraftKey();
