@@ -1,11 +1,10 @@
-// src/pages/ai-chat.tsx
-
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Send, Loader, Mic, MicOff, Volume2 } from 'lucide-react';
 import { GoogleGenerativeAI, Content } from '@google/generative-ai';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { User } from '@supabase/supabase-js'; // It's good practice to import the type
 
 // --- Initialize the Gemini Model ---
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
@@ -28,8 +27,8 @@ const ThinkingIndicator = () => (
         <span className="text-purple-700 font-medium">AI is thinking...</span>
         <div className="flex space-x-1">
           <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
-          <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+          <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
         </div>
       </div>
     </div>
@@ -51,16 +50,16 @@ const useSpeechRecognition = () => {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
-    
+
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
-    
+
     oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.1);
-    
+
     gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-    
+
     oscillator.start(audioContext.currentTime);
     oscillator.stop(audioContext.currentTime + 0.2);
   };
@@ -70,16 +69,16 @@ const useSpeechRecognition = () => {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
-    
+
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
-    
+
     oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.1);
-    
+
     gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-    
+
     oscillator.start(audioContext.currentTime);
     oscillator.stop(audioContext.currentTime + 0.15);
   };
@@ -87,7 +86,7 @@ const useSpeechRecognition = () => {
   useEffect(() => {
     if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       setIsSupported(true);
-      
+
       // Request microphone permission
       navigator.mediaDevices?.getUserMedia({ audio: true })
         .then(() => setHasPermission(true))
@@ -95,7 +94,7 @@ const useSpeechRecognition = () => {
 
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-      
+
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'en-US';
@@ -115,7 +114,7 @@ const useSpeechRecognition = () => {
       recognitionRef.current.onresult = (event: any) => {
         let interimTranscript = '';
         let finalTranscript = '';
-        
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
@@ -124,7 +123,7 @@ const useSpeechRecognition = () => {
             interimTranscript += transcript;
           }
         }
-        
+
         // Update with final transcript, or interim if no final yet
         if (finalTranscript) {
           setTranscript(finalTranscript);
@@ -135,7 +134,7 @@ const useSpeechRecognition = () => {
 
       recognitionRef.current.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
-        
+
         if (event.error === 'not-allowed') {
           setHasPermission(false);
           alert('Microphone access denied. Please enable microphone permissions in your browser settings.');
@@ -143,7 +142,7 @@ const useSpeechRecognition = () => {
           console.log('No speech detected, but continuing to listen...');
           return; // Don't stop listening for no-speech errors
         }
-        
+
         setIsListening(false);
         isStartingRef.current = false;
       };
@@ -200,12 +199,12 @@ const useSpeechRecognition = () => {
     }
   };
 
-  return { 
-    isListening, 
-    transcript, 
-    startListening, 
-    stopListening, 
-    isSupported: isSupported && hasPermission !== false 
+  return {
+    isListening,
+    transcript,
+    startListening,
+    stopListening,
+    isSupported: isSupported && hasPermission !== false
   };
 };
 
@@ -214,23 +213,18 @@ export function AIChat() {
   const [input, setInput] = useState('');
   const [isAwaitingResponse, setIsAwaitingResponse] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // const location = useLocation();
-  // const navigate = useNavigate();
   const { user } = useAuth();
-  
-  // Speech recognition
+
   const { isListening, transcript, startListening, stopListening, isSupported } = useSpeechRecognition();
 
-  // Update input when speech transcript changes
   useEffect(() => {
     if (transcript) {
       setInput(transcript);
     }
   }, [transcript]);
 
-  // Text-to-speech function
   const speakMessage = (text: string) => {
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(text);
@@ -241,7 +235,6 @@ export function AIChat() {
     }
   };
 
-  // --- Load persistent chat history on component mount ---
   useEffect(() => {
     const fetchHistory = async () => {
       if (!user) {
@@ -253,16 +246,18 @@ export function AIChat() {
         .from('chat_messages')
         .select('role, content')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
         .limit(10);
 
       if (error) {
         console.error("Error fetching chat history:", error);
       } else if (data && data.length > 0) {
-        setMessages(data.map(msg => ({
+        // FIX 1: Explicitly type the mapped array as Message[] to satisfy TypeScript's strictness.
+        const loadedMessages: Message[] = data.map(msg => ({
           text: msg.content,
           sender: msg.role === 'model' ? 'ai' : 'user'
-        })));
+        }));
+        setMessages(loadedMessages.reverse());
       } else {
         setMessages([{ text: "Hello! I am your personal AI wellness assistant. How can I help you today? 🌟", sender: 'ai' }]);
       }
@@ -272,16 +267,28 @@ export function AIChat() {
     fetchHistory();
   }, [user]);
 
-  // Auto-scroll effect
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isAwaitingResponse]);
 
-    // Main function to get AI response with retry logic
   const getAIResponse = async (currentMessages: Message[]) => {
+    // FIX 2: Add a guard clause to ensure 'user' is not null before proceeding.
+    if (!user) {
+      console.error("getAIResponse was called without a user. Aborting.");
+      setMessages(prev => [...prev, { text: "There was an authentication error. Please sign in again.", sender: 'ai' }]);
+      setIsAwaitingResponse(false);
+      return;
+    }
+
     setIsAwaitingResponse(true);
     const maxRetries = 3;
     let delay = 2000;
+
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', user.id) // This is now safe to call
+      .single();
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -289,37 +296,32 @@ export function AIChat() {
           role: msg.sender === 'user' ? 'user' : 'model',
           parts: [{ text: msg.text }],
         }));
-        
+
+        const systemPrompt = `You are a mental health and wellness assistant. Your role is to provide supportive and helpful conversations about personal problems, mental health, and stress. Do not answer questions about other topics, such as coding or general knowledge. If the user asks about something outside of your scope, politely decline and steer the conversation back to wellness. The user's name is ${userProfile?.display_name || 'Not provided'} and here is the other information about by profile please holt it this is very quicial information and if today is users birthday then wise the user and also see if not provided tell the personal information is not provided instead of saying that i dont have access to your personal information this is the data of the user from the datbase please follow the instructions as instructed ${userProfile}.`;
+
         const latestMessage = geminiFormattedMessages.pop();
         if (!latestMessage) return;
-        
+
         let history = geminiFormattedMessages;
         if (history.length > 0 && history[0].role !== 'user') history = [];
 
-        // --- STEP 1: Get the immediate chat response ---
-        const chat = model.startChat({ history });
+        const chat = model.startChat({
+          history,
+          systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+        });
         const result = await chat.sendMessage(latestMessage.parts);
         const text = (await result.response.text()).trim();
 
-        // --- STEP 2: Save and display the response immediately ---
-        if (user) {
-          // Await this to ensure the message is saved before we proceed
-          await supabase.from('chat_messages').insert({ user_id: user.id, role: 'model', content: text });
-        }
-        
+        await supabase.from('chat_messages').insert({ user_id: user.id, role: 'model', content: text });
+
         const finalConversation = [...currentMessages, { text, sender: 'ai' as const }];
         setMessages(finalConversation);
-        
-        // --- STEP 3: Stop the loading indicator for the user ---
-        // The user now has their response. The "AI is thinking" message can disappear.
+
         setIsAwaitingResponse(false);
 
-        // --- STEP 4: Trigger the background task WITHOUT waiting for it ---
-        // By removing 'await', this function runs in the background.
-        // The getAIResponse function will finish and return immediately.
-        updateSummaryAndRecommendations(finalConversation); 
-        
-        return; // Exit the function and retry loop on success.
+        updateSummaryAndRecommendations(finalConversation, user);
+
+        return;
 
       } catch (error: any) {
         if (error.message && error.message.includes('503')) {
@@ -337,21 +339,41 @@ export function AIChat() {
         }
       }
     }
-    // Failsafe in case of loop exit
     setIsAwaitingResponse(false);
   };
 
-    // This function now runs silently in the background
-  const updateSummaryAndRecommendations = async (fullConversation: Message[]) => {
-    // We still check for user and conversation length
-    if (!user || fullConversation.length < 4) return;
+  const updateSummaryAndRecommendations = async (fullConversation: Message[], currentUser: User) => {
+    if (fullConversation.length < 4) return;
+
+    const { data: summaryData, error: summaryError } = await supabase
+      .from('user_ai_summaries')
+      .select('prompt_count, aichat_summary, diary_summary')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+
+    if (summaryError) {
+      console.error("Error fetching summary data:", summaryError);
+      return;
+    }
+
+    const currentPromptCount = summaryData?.prompt_count || 0;
+
+    // Increment count first
+    const newPromptCount = currentPromptCount + 1;
+    await supabase.from('user_ai_summaries').upsert({
+      user_id: currentUser.id,
+      prompt_count: newPromptCount,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' });
+
+    // Only update recommendations every 5 prompts
+    if (newPromptCount < 5) {
+      return;
+    }
 
     try {
       const conversationText = fullConversation.map(m => `${m.sender}: ${m.text}`).join('\n');
-      const { data: summaryData } = await supabase.from('user_ai_summaries').select('*').eq('user_id', user.id).maybeSingle();
-      
-      // --- You can still use the optimized single-prompt approach here ---
-      // This is efficient for the background task without slowing the user down.
+
       const oldSummary = summaryData?.aichat_summary || "This is the user's first conversation.";
       const diarySummary = summaryData?.diary_summary || 'No recent diary summary.';
 
@@ -362,26 +384,31 @@ export function AIChat() {
         LATEST CONVERSATION: "${conversationText}"
         DIARY SUMMARY: "${diarySummary}"
 
-        Respond with the updated summary, followed by a "###---###" separator, and then the recommendations in the format **Title**: Description.
+        Respond with the updated summary, followed by a "###---###" separator, and then the personal recommendations that is acheivable small tasks in the format **Title**: Description.
       `;
       const result = await model.generateContent(combinedPrompt);
       const responseText = await result.response.text();
-      
+
       const [updatedSummary, recsText] = responseText.split('###---###');
-      
+
+      if (!updatedSummary || !recsText) {
+        console.error("Failed to parse summary and recommendations from AI response.");
+        return;
+      }
+
       const parsedRecommendations = recsText.trim().split('\n')
         .map(rec => rec.replace(/^\d+\.\s*/, '').trim())
         .filter(rec => rec.length > 5 && !rec.toLowerCase().startsWith("here are"));
 
       await supabase.from('user_ai_summaries').upsert({
-        user_id: user.id, 
-        aichat_summary: updatedSummary.trim(), 
-        recommendations: parsedRecommendations.slice(0, 3), 
+        user_id: currentUser.id,
+        aichat_summary: updatedSummary.trim(),
+        recommendations: parsedRecommendations.slice(0, 3),
+        prompt_count: 0, // Reset prompt count
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' });
 
     } catch (error) {
-      // If this background task fails, we just log it. We don't show an error to the user.
       console.error("Silent background task to update AI summary failed:", error);
     }
   };
@@ -390,18 +417,17 @@ export function AIChat() {
     e.preventDefault();
     const trimmedInput = input.trim();
     if (trimmedInput === '' || isAwaitingResponse) return;
-    
-    // Stop listening if currently recording
+
     if (isListening) {
       stopListening();
     }
-    
-    const newMessages = [...messages, { text: trimmedInput, sender: 'user' as const }];
+
+    const newMessages: Message[] = [...messages, { text: trimmedInput, sender: 'user' }];
     setMessages(newMessages);
     setInput('');
-    
+
     if (user) {
-        await supabase.from('chat_messages').insert({ user_id: user.id, role: 'user', content: trimmedInput });
+      await supabase.from('chat_messages').insert({ user_id: user.id, role: 'user', content: trimmedInput });
     }
 
     await getAIResponse(newMessages);
@@ -440,8 +466,8 @@ export function AIChat() {
           </div>
           <h2 className="text-3xl font-bold text-gray-800 mb-3">Welcome Back!</h2>
           <p className="text-gray-600 mb-6 leading-relaxed">Sign in to continue your wellness journey with your personal AI assistant.</p>
-          <Link 
-            to="/auth" 
+          <Link
+            to="/auth"
             className="inline-flex items-center justify-center w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
           >
             Get Started
@@ -472,26 +498,21 @@ export function AIChat() {
           {messages.map((msg, index) => (
             <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} group`}>
               <div className={`flex items-end space-x-3 max-w-lg ${msg.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                {/* Avatar */}
-                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                  msg.sender === 'user' 
-                    ? 'bg-gradient-to-r from-purple-500 to-blue-500' 
+                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${msg.sender === 'user'
+                    ? 'bg-gradient-to-r from-purple-500 to-blue-500'
                     : 'bg-gradient-to-r from-green-400 to-blue-500'
-                }`}>
+                  }`}>
                   <span className="text-white text-xs font-bold">
                     {msg.sender === 'user' ? 'U' : 'AI'}
                   </span>
                 </div>
-                
-                {/* Message bubble */}
-                <div className={`relative px-6 py-4 rounded-2xl shadow-lg max-w-full break-words ${
-                  msg.sender === 'user' 
-                    ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-br-md' 
+
+                <div className={`relative px-6 py-4 rounded-2xl shadow-lg max-w-full break-words ${msg.sender === 'user'
+                    ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-br-md'
                     : 'bg-white text-gray-800 border border-gray-100 rounded-bl-md'
-                }`}>
+                  }`}>
                   <p className="leading-relaxed">{msg.text}</p>
-                  
-                  {/* Speak button for AI messages */}
+
                   {msg.sender === 'ai' && (
                     <button
                       onClick={() => speakMessage(msg.text)}
@@ -505,8 +526,7 @@ export function AIChat() {
               </div>
             </div>
           ))}
-          
-          {/* Thinking indicator */}
+
           {isAwaitingResponse && <ThinkingIndicator />}
           <div ref={messagesEndRef} />
         </div>
@@ -516,18 +536,16 @@ export function AIChat() {
       <div className="bg-white border-t border-gray-200 p-6 rounded-b-3xl shadow-lg">
         <form onSubmit={handleSend} className="max-w-4xl mx-auto">
           <div className="flex items-end space-x-4">
-            {/* Voice input indicator */}
             {isListening && (
               <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-full shadow-lg animate-pulse">
                 <div className="flex items-center space-x-2">
                   <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
                   <span className="text-sm font-medium">Listening...</span>
-                  <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                  <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                 </div>
               </div>
             )}
-            
-            {/* Text input */}
+
             <div className="flex-1 relative">
               <input
                 type="text"
@@ -540,24 +558,22 @@ export function AIChat() {
                 <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
                   <div className="flex space-x-1">
                     <div className="w-1 h-4 bg-red-400 rounded-full animate-pulse"></div>
-                    <div className="w-1 h-6 bg-red-500 rounded-full animate-pulse" style={{animationDelay: '0.1s'}}></div>
-                    <div className="w-1 h-4 bg-red-400 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                    <div className="w-1 h-6 bg-red-500 rounded-full animate-pulse" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-1 h-4 bg-red-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
                   </div>
                 </div>
               )}
             </div>
-            
-            {/* Voice button */}
+
             {isSupported && (
               <button
                 type="button"
                 onClick={toggleListening}
                 disabled={isAwaitingResponse}
-                className={`p-4 rounded-2xl shadow-lg transform transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
-                  isListening 
-                    ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse shadow-red-200' 
+                className={`p-4 rounded-2xl shadow-lg transform transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${isListening
+                    ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse shadow-red-200'
                     : 'bg-gray-100 hover:bg-gray-200 text-gray-600 hover:shadow-md'
-                }`}
+                  }`}
                 title={isListening ? "Stop recording (click or speak)" : "Start voice input"}
               >
                 {isListening ? (
@@ -570,8 +586,7 @@ export function AIChat() {
                 )}
               </button>
             )}
-            
-            {/* Send button */}
+
             <button
               type="submit"
               disabled={!input.trim() || isAwaitingResponse}
