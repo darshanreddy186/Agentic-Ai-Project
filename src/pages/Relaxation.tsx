@@ -15,6 +15,13 @@ import {
   Target,
 } from "lucide-react";
 
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
 export function Relaxation(): JSX.Element {
   /* ----------------- Section 1: Breathing ----------------- */
   const [breathingActive, setBreathingActive] = useState(false);
@@ -227,24 +234,27 @@ export function Relaxation(): JSX.Element {
   const stretchPrompts = [
     {
       title: "Neck & Shoulder Release",
-      duration: 45,
+      duration: 633,
       icon: "🦢",
       description: "Gentle movements to release tension",
-      videoUrl: "https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.mp4",
+      videoUrl: "https://youtu.be/s-7lyvblFNI?si=xz39Vo54mfKzszCQ",
+      youtubeId: "s-7lyvblFNI", // <-- Add YouTube ID
     },
     {
       title: "Seated Spinal Twist",
-      duration: 60,
+      duration: 110,
       icon: "🌀",
       description: "Improve spine mobility and posture",
-      videoUrl: "https://media.giphy.com/media/l0Exk8EUzSLsrErEQ/giphy.mp4",
+      videoUrl: "https://youtu.be/ciGK6HyYqV4?si=D2Uq5pasJW8NW0WC",
+      youtubeId: "ciGK6HyYqV4",
     },
     {
       title: "Standing Hamstring Stretch",
-      duration: 50,
+      duration: 62,
       icon: "🦵",
       description: "Lengthen and strengthen your legs",
-      videoUrl: "https://media.giphy.com/media/3o6fJbn2bu6j6iVq7e/giphy.mp4",
+      videoUrl: "https://youtu.be/tZLqLxmSjjU?si=FqzQ4ysROjfTdJVY",
+      youtubeId: "tZLqLxmSjjU",
     },
   ];
   
@@ -252,13 +262,42 @@ export function Relaxation(): JSX.Element {
   const [stretchActive, setStretchActive] = useState(false);
   const [stretchTimer, setStretchTimer] = useState(0);
   const stretchVideoRef = useRef<HTMLVideoElement | null>(null);
+  const youtubePlayerRef = useRef<any>(null);
+  const timerIntervalRef = useRef<any>(null);
+  const [isTimerPaused, setIsTimerPaused] = useState(false);
+
+  useEffect(() => {
+    if (!stretchActive || selectedStretch === null) return;
+
+    // Load YouTube IFrame API if not loaded
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.body.appendChild(tag);
+      return;
+    }
+
+    youtubePlayerRef.current = new window.YT.Player(`stretch-youtube-player`, {
+      events: {
+        onStateChange: (event: any) => {
+          if (event.data === window.YT.PlayerState.PAUSED) {
+            setIsTimerPaused(true);
+          } else if (event.data === window.YT.PlayerState.PLAYING) {
+            setIsTimerPaused(false);
+          }
+        }
+      }
+    });
+  }, [stretchActive, selectedStretch]);
 
   useEffect(() => {
     if (!stretchActive || stretchTimer <= 0) return;
-    const t = setInterval(() => {
+    if (isTimerPaused) return;
+
+    timerIntervalRef.current = setInterval(() => {
       setStretchTimer((s) => {
         if (s <= 1) {
-          clearInterval(t);
+          clearInterval(timerIntervalRef.current);
           setStretchActive(false);
           setSelectedStretch(null);
           return 0;
@@ -266,8 +305,9 @@ export function Relaxation(): JSX.Element {
         return s - 1;
       });
     }, 1000);
-    return () => clearInterval(t);
-  }, [stretchActive, stretchTimer]);
+
+    return () => clearInterval(timerIntervalRef.current);
+  }, [stretchActive, stretchTimer, isTimerPaused]);
 
   const startStretch = (i: number) => {
     setSelectedStretch(i);
@@ -302,21 +342,21 @@ export function Relaxation(): JSX.Element {
   const videoOptions = [
     {
       title: "5 Min Guided Breathing",
-      videoId: "2OEL4P1Rz04",
+      videoId: "inpok4MKVLM",
       description: "Short breathing practice for instant calm",
       duration: "5 min",
       category: "Breathing"
     },
     {
       title: "10 Min Body Scan Meditation",
-      videoId: "inpok4MKVLM",
+      videoId: "nnVCadMo3qI",
       description: "Progressive relaxation to release tension",
       duration: "10 min",
       category: "Body Scan"
     },
     {
       title: "Sleep Story & Gentle Sounds",
-      videoId: "E1S1kCkFxxU",
+      videoId: "2OEL4P1Rz04",
       description: "Soothing bedtime audio for better sleep",
       duration: "20 min",
       category: "Sleep"
@@ -603,17 +643,15 @@ export function Relaxation(): JSX.Element {
                 <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-6 shadow-xl border border-orange-200">
                   <div className="max-w-4xl mx-auto">
                     <div className="relative w-full rounded-xl overflow-hidden shadow-2xl" style={{ paddingTop: "56.25%" }}>
-                      <video
-                        ref={stretchVideoRef}
-                        src={stretchPrompts[selectedStretch].videoUrl}
-                        autoPlay
-                        muted
-                        playsInline
-                        controls
-                        className="absolute top-0 left-0 w-full h-full object-cover"
+                      <iframe
+                        id="stretch-youtube-player"
+                        title={stretchPrompts[selectedStretch].title}
+                        src={`https://www.youtube.com/embed/${stretchPrompts[selectedStretch].youtubeId}?enablejsapi=1&rel=0&modestbranding=1&autoplay=1`}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="absolute top-0 left-0 w-full h-full"
                       />
                     </div>
-                    
                     <div className="flex items-center justify-between mt-4 p-4 bg-white/80 rounded-xl">
                       <div className="flex items-center gap-4">
                         <div className="text-2xl">{stretchPrompts[selectedStretch].icon}</div>
@@ -622,7 +660,6 @@ export function Relaxation(): JSX.Element {
                           <div className="text-orange-700 text-sm">{stretchPrompts[selectedStretch].description}</div>
                         </div>
                       </div>
-                      
                       <div className="flex items-center gap-4">
                         <div className="text-right">
                           <div className="text-2xl font-bold text-orange-800">{formatTime(stretchTimer)}</div>
