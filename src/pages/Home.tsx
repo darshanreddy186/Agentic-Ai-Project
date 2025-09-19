@@ -393,16 +393,32 @@ function DailyMotivationPlayer() {
         );
     }
 
+    // Replace the info button/tooltip region with a tooltip that appears inside the card
     return (
         <div className="lg:col-span-2 rounded-2xl shadow-2xl overflow-hidden relative group h-[300px] border border-white/50">
             <img src={motivation.imagelink} alt={motivation.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
             <div className="absolute inset-0 bg-black/60"></div>
 
-            <div className="absolute top-4 right-4 z-20 group/tooltip" style={{marginTop:"10px",backgroundColor:"white"}} >
-                <Info className="w-6 h-6 text-white/70 cursor-pointer" style={{marginTop:"10px"}} />
-                <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-gray-800 text-white text-sm rounded-lg shadow-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none">
-                    Today's motivational story was created by {motivation.created_by_username}. You be the first one to create it tomorrow!
-                    <div className="absolute top-full right-4 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-gray-800"></div>
+            {/* Info button and tooltip */}
+            <div className="absolute top-4 right-4 z-20">
+                <div className="relative group/info">
+                    <button
+                        type="button"
+                        className="flex items-center justify-center w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                        tabIndex={0}
+                    >
+                        <Info className="w-6 h-6 text-white/70" />
+                    </button>
+                    <div
+                        className="absolute right-0 mt-2 w-64 p-3 bg-gray-800 text-white text-sm rounded-lg shadow-lg opacity-0 group-hover/info:opacity-100 group-focus-within/info:opacity-100 transition-opacity pointer-events-none group-hover/info:pointer-events-auto group-focus-within/info:pointer-events-auto"
+                        style={{
+                            top: '100%',
+                            zIndex: 30,
+                        }}
+                    >
+                        Today's motivational story was created by <b><i>{motivation.created_by_username}</i></b>. Be the first to create one tomorrow!
+                        <div className="absolute -top-2 right-4 w-0 h-0 border-x-8 border-x-transparent border-b-8 border-b-gray-800"></div>
+                    </div>
                 </div>
             </div>
 
