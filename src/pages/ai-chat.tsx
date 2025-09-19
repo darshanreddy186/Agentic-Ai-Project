@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth';
 import { User } from '@supabase/supabase-js'; // It's good practice to import the type
 
 // --- Initialize the Gemini Model ---
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY3);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 interface Message {

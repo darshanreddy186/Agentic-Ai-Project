@@ -7,7 +7,7 @@ import { Plus, MessageCircle, Users, Send, ArrowLeft, Heart, Shield, Sparkles, L
 
 // --- AI Moderation Setup (Client-Side) ---
 // WARNING: This exposes your API key to the browser. Use with extreme caution.
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY1;
 if (!GEMINI_API_KEY) {
     console.warn("VITE_GEMINI_API_KEY is not set. AI moderation will be disabled.");
 }

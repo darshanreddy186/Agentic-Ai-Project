@@ -266,7 +266,7 @@ function DailyMotivationPlayer() {
     }
 
     async function generateMotivationContent() {
-        const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
+        const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY3 as string;
         const genAI =new GoogleGenAI({ apiKey: GEMINI_API_KEY });
         const genAI1 = new GoogleGenerativeAI(GEMINI_API_KEY);
 

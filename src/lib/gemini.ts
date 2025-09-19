@@ -120,4 +120,4 @@ Provide brief, actionable recommendations suitable for youth, formatted as a sim
   }
 }
 
-export const geminiAI = new GeminiAI(import.meta.env.VITE_GEMINI_API_KEY || '')
+export const geminiAI = new GeminiAI(import.meta.env.VITE_GEMINI_API_KEY2 || '')
