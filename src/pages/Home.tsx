@@ -8,6 +8,8 @@ import {
 import { PersonalizedRecommendations } from '../components/PersonalizedRecommendations.tsx'; // Make sure this path is correct
 import { MemoriesSlideshow } from '../components/MemoriesSlideshow';
 import { useAuth } from '../hooks/useAuth';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { Modality,GoogleGenAI } from "@google/genai";
 
 // --- Type Definitions ---
 interface Story {
@@ -160,6 +162,155 @@ function DailyMotivationPlayer() {
         fetchDailyMotivation();
     }, []);
 
+    function base64ToUint8Array(base64: string): Uint8Array {
+        const binaryString = atob(base64); // browser safe
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes;
+    }
+
+    async function uploadBase64ToSupabase(base64: string, bucket: string, filePath: string): Promise<string> {
+        const fileData = base64ToUint8Array(base64);
+
+        // Upload the file
+        const { error } = await supabase.storage.from(bucket).upload(filePath, fileData, {
+            contentType: "image/png",
+            upsert: true,
+        });
+
+        if (error) throw error;
+
+        const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+        return data.publicUrl;
+    }
+
+    async function uploadBase64AudioToSupabase(base64: string, bucket: string, filePath: string): Promise<string> {
+    const fileData = base64ToUint8Array(base64);
+
+    // Upload raw Gemini audio
+    const { error } = await supabase.storage.from(bucket).upload(filePath, fileData, {
+        contentType: "audio/wav", // Gemini returns wav
+        upsert: true,
+    });
+
+    if (error) throw error;
+
+    const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+    return data.publicUrl;
+    }
+
+    async function generateImageFromPrompt(prompt: string, genAI: any, date: string) {
+        const response = await genAI.models.generateContent({
+            model: "gemini-2.0-flash-preview-image-generation",
+            contents: [{ text: prompt }],
+            config: {
+            responseModalities: [Modality.TEXT, Modality.IMAGE],
+            },
+        });
+
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if ("inlineData" in part) {
+            const imageData = part.inlineData?.data;
+            if (imageData) {
+                // Save into Supabase instead of local fs
+                const filePath = `dailyMotivation/${date}/generated-image.png`;
+                const publicUrl = await uploadBase64ToSupabase(imageData, "diary_images", filePath);
+                return publicUrl;
+            }
+            }
+        }
+
+        throw new Error("Image generation failed");
+    }
+
+    async function convertTextToSpeech(text: string,date: string, genAI: any) {
+        const selectedList = ["zephyr", "puck", "charon", "fenrir", "orus", "enceladus", "iapetus", "algenib", "rasalgethi", "gacrux", "pulcherrima", "zubenelgenubi", "sadaltager","kore", "leda", "aoede", "callirrhoe", "autonoe", "umbriel", "algieba", "despina", "erinome", "laomedeia", "achernar", "alnilam", "schedar", "achird", "vindemiatrix", "sadachbia", "sulafat"];
+        const voiceNameCharacter = selectedList[Math.floor(Math.random() * selectedList.length)];
+
+        // Call Gemini TTS
+        const response = await genAI.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts",
+            contents: [{ parts: [{ text }] }],
+            config: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+                voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: voiceNameCharacter },
+                },
+            },
+            },
+        });
+
+        const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!data) throw new Error("No audio data received from Gemini TTS");
+
+        // Save into Supabase
+        const filePath = `dailyMotivation/${date}/out.wav`;
+        const publicUrl = await uploadBase64AudioToSupabase(data, "diary_images", filePath);
+
+        return publicUrl;
+    }
+
+    async function generateMotivationContent() {
+        const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
+        const genAI =new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+        const genAI1 = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+        const mainPrompt = `
+        Generate a motivational quote by a famous human (scientist, leader, sage, or Lord Krishna), then the author's name, then a short motivational story (400-500 words) inspired by that quote, and finally a detailed image generation prompt for this quote and story. 
+        Be specific with the details in the image prompt to get a high quality image and also with the story this is used for text-to-speech conversion.
+        Respond in this format (each part separated by a unique separator line):
+
+        ---QUOTE---
+        "Quote text here"
+        ---AUTHOR---
+        Author Name
+        ---STORY---
+        Motivational story here
+        ---IMAGE_PROMPT---
+        Image generation prompt here
+        `;
+
+        const textModel = genAI1?.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const textResp = await textModel?.generateContent(mainPrompt);
+        const text = textResp?.response.text() || "";
+
+        // 3. Parse the response
+        const quote = (text.match(/---QUOTE---\s*([\s\S]*?)\s*---AUTHOR---/) || [])[1]?.replace(/^"|"$/g, "")?.trim() || "";
+        const author = (text.match(/---AUTHOR---\s*([\s\S]*?)\s*---STORY---/) || [])[1]?.trim() || "";
+        const story = (text.match(/---STORY---\s*([\s\S]*?)\s*---IMAGE_PROMPT---/) || [])[1]?.trim() || "";
+        const imagePrompt = (text.match(/---IMAGE_PROMPT---\s*([\s\S]*)$/) || [])[1]?.trim() || "";
+
+        const today = new Date().toISOString().slice(0, 10);
+
+        const imageUrl = await generateImageFromPrompt(imagePrompt, genAI,today);
+        
+        const audioUrl = await convertTextToSpeech(story, today, genAI);
+        console.log("Generated Content:", { quote, author, story, imagePrompt , imageUrl , audioUrl });
+        try {
+            const { data, error } = await supabase.from("daily_motivation").insert([
+            {
+                name: author,
+                quote: quote,
+                audiolink: audioUrl,
+                imagelink: imageUrl,
+                created_by_username: user?.email,
+            },
+            ]);
+
+            if (error) {
+            console.error("Error inserting sample data:", error);
+            } else {
+            console.log("Inserted sample data:", data);
+            }
+        } catch (err) {
+            console.error("Unexpected error:", err);
+        }
+    }
+
     const handleGenerateMotivation = async () => {
         if (!user) {
             setError("You must be logged in to generate a story.");
@@ -169,17 +320,31 @@ function DailyMotivationPlayer() {
         setError(null);
 
         try {
-            // This would call your backend endpoint that contains the Gemini logic
-            const response = await fetch('/api/generate-motivation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: user.id, email: user.email }),
-            });
+            await fetchDailyMotivation(); // optional, if you want to show existing data
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to generate motivational story.');
+            const today = new Date().toISOString().slice(0, 10);
+
+            // Check if today's motivation already exists
+            const { data: existingData, error: fetchError } = await supabase
+            .from("daily_motivation")
+            .select("*")
+            .gte("created_at", `${today}T00:00:00.000Z`)
+            .lte("created_at", `${today}T23:59:59.999Z`)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+
+            if (fetchError) {
+            console.error("Error fetching today's motivation:", fetchError);
             }
+
+            if (existingData) {
+            console.log("Today's motivation already exists:", existingData);
+            setIsGenerating(false);
+            return; // Exit early, skip generation
+            }
+            // This would call your backend endpoint that contains the Gemini logic
+            await generateMotivationContent();
 
             // After successful generation, refetch the motivation for today
             await fetchDailyMotivation();
@@ -233,8 +398,8 @@ function DailyMotivationPlayer() {
             <img src={motivation.imagelink} alt={motivation.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
             <div className="absolute inset-0 bg-black/60"></div>
 
-            <div className="absolute top-4 right-4 z-20 group/tooltip">
-                <Info className="w-6 h-6 text-white/70 cursor-pointer" />
+            <div className="absolute top-4 right-4 z-20 group/tooltip" style={{marginTop:"10px",backgroundColor:"white"}} >
+                <Info className="w-6 h-6 text-white/70 cursor-pointer" style={{marginTop:"10px"}} />
                 <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-gray-800 text-white text-sm rounded-lg shadow-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none">
                     Today's motivational story was created by {motivation.created_by_username}. You be the first one to create it tomorrow!
                     <div className="absolute top-full right-4 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-gray-800"></div>
