@@ -87,7 +87,7 @@ export function Auth() {
               <Heart className="w-8 h-8 text-white" />
             </div>
             <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-              MindfulYou
+              Soul Sync
             </h2>
             <p className="mt-2 text-sm text-gray-600">
               Your personal space for mental wellness and growth

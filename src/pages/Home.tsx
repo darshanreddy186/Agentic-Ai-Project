@@ -187,19 +187,28 @@ function DailyMotivationPlayer() {
         return data.publicUrl;
     }
 
+    // Replace uploadBase64AudioToSupabase to use mp3 MIME type and extension
     async function uploadBase64AudioToSupabase(base64: string, bucket: string, filePath: string): Promise<string> {
-    const fileData = base64ToUint8Array(base64);
+        // Convert base64 to binary string
+        const binaryString = atob(base64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        // Create a Blob with the correct MIME type for mp3
+        const audioBlob = new Blob([bytes], { type: "audio/mpeg" });
 
-    // Upload raw Gemini audio
-    const { error } = await supabase.storage.from(bucket).upload(filePath, fileData, {
-        contentType: "audio/wav", // Gemini returns wav
-        upsert: true,
-    });
+        // Upload the Blob to Supabase
+        const { error } = await supabase.storage.from(bucket).upload(filePath, audioBlob, {
+            contentType: "audio/mpeg",
+            upsert: true,
+        });
 
-    if (error) throw error;
+        if (error) throw error;
 
-    const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
-    return data.publicUrl;
+        const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+        return data.publicUrl;
     }
 
     async function generateImageFromPrompt(prompt: string, genAI: any, date: string) {
@@ -226,8 +235,10 @@ function DailyMotivationPlayer() {
         throw new Error("Image generation failed");
     }
 
-    async function convertTextToSpeech(text: string,date: string, genAI: any) {
-        const selectedList = ["zephyr", "puck", "charon", "fenrir", "orus", "enceladus", "iapetus", "algenib", "rasalgethi", "gacrux", "pulcherrima", "zubenelgenubi", "sadaltager","kore", "leda", "aoede", "callirrhoe", "autonoe", "umbriel", "algieba", "despina", "erinome", "laomedeia", "achernar", "alnilam", "schedar", "achird", "vindemiatrix", "sadachbia", "sulafat"];
+    async function convertTextToSpeech(text: string, date: string, genAI: any) {
+        const selectedList = [
+            "zephyr", "puck", "charon", "fenrir", "orus", "enceladus", "iapetus", "algenib", "rasalgethi", "gacrux", "pulcherrima", "zubenelgenubi", "sadaltager", "kore", "leda", "aoede", "callirrhoe", "autonoe", "umbriel", "algieba", "despina", "erinome", "laomedeia", "achernar", "alnilam", "schedar", "achird", "vindemiatrix", "sadachbia", "sulafat"
+        ];
         const voiceNameCharacter = selectedList[Math.floor(Math.random() * selectedList.length)];
 
         // Call Gemini TTS
@@ -247,8 +258,8 @@ function DailyMotivationPlayer() {
         const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
         if (!data) throw new Error("No audio data received from Gemini TTS");
 
-        // Save into Supabase
-        const filePath = `dailyMotivation/${date}/out.wav`;
+        // Save into Supabase using Blob for correct audio format (mp3)
+        const filePath = `dailyMotivation/${date}/out.mp3`;
         const publicUrl = await uploadBase64AudioToSupabase(data, "diary_images", filePath);
 
         return publicUrl;
@@ -260,9 +271,9 @@ function DailyMotivationPlayer() {
         const genAI1 = new GoogleGenerativeAI(GEMINI_API_KEY);
 
         const mainPrompt = `
-        Generate a motivational quote by a famous human (scientist, leader, sage, or Lord Krishna), then the author's name, then a short motivational story (400-500 words) inspired by that quote, and finally a detailed image generation prompt for this quote and story. 
-        Be specific with the details in the image prompt to get a high quality image and also with the story this is used for text-to-speech conversion.
-        Respond in this format (each part separated by a unique separator line):
+        Generate a motivational quote by a famous human random caracter quote is fine dont use the same character always change your memory and try(scientist, leader, sage or loard Krishna), then the author's name, then a short motivational story (400-500 words) inspired by that quote, and finally a detailed image generation prompt for this quote and story. 
+        Be specific with the details in the image prompt to get a high quality image and remember that the image generated must be relavent to the to motivational quote and it must not just eb a random image and also with the story this is used for text-to-speech conversion.
+        Respond in this format (each part separated by a unique separator line): please be accurate to your work and do not make any mistakes in the format and also do not add any additional text or information other than what is asked for in the format below:
 
         ---QUOTE---
         "Quote text here"
@@ -274,7 +285,7 @@ function DailyMotivationPlayer() {
         Image generation prompt here
         `;
 
-        const textModel = genAI1?.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const textModel = genAI1?.getGenerativeModel({ model: "gemini-1.5-flash" });
         const textResp = await textModel?.generateContent(mainPrompt);
         const text = textResp?.response.text() || "";
 
@@ -291,24 +302,44 @@ function DailyMotivationPlayer() {
         const audioUrl = await convertTextToSpeech(story, today, genAI);
         console.log("Generated Content:", { quote, author, story, imagePrompt , imageUrl , audioUrl });
         try {
-            const { data, error } = await supabase.from("daily_motivation").insert([
-            {
-                name: author,
-                quote: quote,
-                audiolink: audioUrl,
-                imagelink: imageUrl,
-                created_by_username: user?.email,
-            },
-            ]);
+            if (!user) throw new Error("User not logged in");
 
-            if (error) {
-            console.error("Error inserting sample data:", error);
-            } else {
-            console.log("Inserted sample data:", data);
+            // Fetch user profile
+            const { data: userData, error: userError } = await supabase
+                .from("user_profiles")
+                .select("display_name, username")
+                .eq("id", user.id)
+                .single();
+
+            if (userError) throw userError;
+
+            // Determine display name
+            let displayName = "Anonymous";
+            if (userData) {
+                displayName = userData.display_name || userData.username || "Anonymous";
             }
-        } catch (err) {
+
+            // Insert daily motivation
+            const { data: insertData, error: insertError } = await supabase
+                .from("daily_motivation")
+                .insert([
+                {
+                    name: author,
+                    quote: quote,
+                    audiolink: audioUrl,
+                    imagelink: imageUrl,
+                    created_by_username: displayName,
+                },
+                ]);
+
+            if (insertError) {
+                console.error("Error inserting sample data:", insertError);
+            } else {
+                console.log("Inserted sample data:", insertData);
+            }
+            } catch (err) {
             console.error("Unexpected error:", err);
-        }
+            }
     }
 
     const handleGenerateMotivation = async () => {
@@ -320,7 +351,6 @@ function DailyMotivationPlayer() {
         setError(null);
 
         try {
-            await fetchDailyMotivation(); // optional, if you want to show existing data
 
             const today = new Date().toISOString().slice(0, 10);
 
@@ -339,9 +369,10 @@ function DailyMotivationPlayer() {
             }
 
             if (existingData) {
-            console.log("Today's motivation already exists:", existingData);
-            setIsGenerating(false);
-            return; // Exit early, skip generation
+                console.log("Today's motivation already exists:", existingData);
+                await fetchDailyMotivation();
+                setIsGenerating(false);
+                return; // Exit early, skip generation
             }
             // This would call your backend endpoint that contains the Gemini logic
             await generateMotivationContent();
@@ -656,7 +687,7 @@ function Footer() {
                     </div>
                 </div>
                 <div className="mt-12 pt-8 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center">
-                    <p className="text-sm text-gray-500">&copy; {new Date().getFullYear()} Our Wellness App. All Rights Reserved.</p>
+                    <p className="text-sm text-gray-500">&copy; {new Date().getFullYear()} Soul Sync App. All Rights Reserved.</p>
                     <div className="flex space-x-4 mt-4 sm:mt-0">
                         <a target="_blank" rel="noopener noreferrer" href="https://x.com/akshaykumar" className="text-gray-500 hover:text-indigo-600 transition-colors"><Twitter className="w-6 h-6" /></a>
                         <a target="_blank" rel="noopener noreferrer" href="https://www.facebook.com/akshaykumarofficial/" className="text-gray-500 hover:text-indigo-600 transition-colors"><Facebook className="w-6 h-6" /></a>
