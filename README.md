@@ -1,5 +1,27 @@
 # Project Discussion & Details  
 
+## 🧠 Deep Dive: Vision & Goals  
+
+This project aims to empower youth (ages 13–24) with a safe, AI-powered platform for mental wellness. By combining modern web technologies and thoughtful design, we’re building a space where users can:  
+
+- **Reflect**: Use an AI-powered diary to track moods and receive personalized insights.  
+- **Connect**: Join an anonymous, supportive community to share experiences and get advice.  
+- **Relax**: Access guided breathing, meditation, and mindfulness tools tailored for young people.  
+- **Grow**: Track wellness progress, receive recommendations, and build healthy habits.  
+
+### Why This Matters  
+
+Mental health is a journey, and young people deserve tools that are private, secure, and genuinely helpful. Our platform is designed with privacy, safety, and accessibility at its core—leveraging AI to provide meaningful support while protecting user data.  
+
+### What Makes Us Unique  
+
+- **AI Diary Analysis**: Personalized feedback and mood trends using Google Gemini AI.  
+- **Anonymous Community**: Safe, moderated space for peer support.  
+- **Relaxation Hub**: Evidence-based exercises and activities.  
+- **Privacy First**: COPPA-compliant, secure authentication, and strict data protection.  
+
+---
+
 ## 📌 Project Overview  
 This project is being built with:  
 
