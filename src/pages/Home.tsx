@@ -285,11 +285,11 @@ function DailyMotivationPlayer() {
         Image generation prompt here
         `;
 
-        const textModel = genAI1?.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const textModel = genAI1?.getGenerativeModel({ model: "gemini-2.5-flash" });
         const textResp = await textModel?.generateContent(mainPrompt);
         const text = textResp?.response.text() || "";
 
-        // 3. Parse the response
+        // 3. Parse the response~
         const quote = (text.match(/---QUOTE---\s*([\s\S]*?)\s*---AUTHOR---/) || [])[1]?.replace(/^"|"$/g, "")?.trim() || "";
         const author = (text.match(/---AUTHOR---\s*([\s\S]*?)\s*---STORY---/) || [])[1]?.trim() || "";
         const story = (text.match(/---STORY---\s*([\s\S]*?)\s*---IMAGE_PROMPT---/) || [])[1]?.trim() || "";

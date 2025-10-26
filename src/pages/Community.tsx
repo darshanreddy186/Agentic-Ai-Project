@@ -29,7 +29,7 @@ interface ModerationResult {
 async function moderateContent(contentToModerate: string, postContext: string | null = null): Promise<ModerationResult> {
     if (!GEMINI_API_KEY) return { category: 'safe', reason: 'API Key not configured.', analysis: {} };
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-latest" });
     const system_prompt = `You are a sophisticated AI safety moderator for a mental health support community. Your job is to analyze user-submitted text for safety and intent, often with the context of an original post.
 
     Categories & Rules:
@@ -70,7 +70,7 @@ async function moderateContent(contentToModerate: string, postContext: string | 
  */
 async function generateSupportiveMessage(content: string): Promise<string> {
     if (!GEMINI_API_KEY) return "It sounds like you're going through a lot. Please remember to be kind to yourself.";
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-latest" });
     const prompt = `A user wrote: "${content}". Write a short, gentle, and empathetic message (1-2 sentences) acknowledging their feelings. Do not give advice. Start with "It sounds like you're going through a lot right now."`;
     try {
         const result = await model.generateContent(prompt);
